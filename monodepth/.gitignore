@@ -1,0 +1,5 @@
+*.ckpt
+*.index
+*.meta
+models/*
+*.npy
