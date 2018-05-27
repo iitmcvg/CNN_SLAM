@@ -1,0 +1,10 @@
+
+# Large files
+
+*.ckpt*
+*.pb
+*.png
+*.jpg
+*.npy
+
+# Directories
