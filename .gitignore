@@ -7,4 +7,7 @@
 *.jpg
 *.npy
 
+# Module Compilations
+*.pyc
+
 # Directories
