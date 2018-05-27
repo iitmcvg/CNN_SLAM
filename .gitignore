@@ -1,6 +1,6 @@
 
 # Large files
-
+*/*.git
 *.ckpt*
 *.pb
 *.png
