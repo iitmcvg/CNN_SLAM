@@ -3,8 +3,8 @@ import cv2
 import tensorflow as tf
 import sys
 import time
-from Refine_Depth_Map import *
-from Depth_Map_Fusion import *
+import pose_estimation.refine_depth_map 
+import pose_estimation.depth_map_fusion 
 
 im_size = (480,640)
 sigma_p = 0 # Some white noise variance thing
