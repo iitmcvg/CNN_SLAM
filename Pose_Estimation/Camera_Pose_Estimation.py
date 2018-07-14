@@ -66,13 +66,20 @@ def get_camera_matrix(path=None):
 
 
 def find_uncertainty(u,D,D_prev,T):
-	u.append(1) #Convert to homogeneous
+	'''
+	Finds uncertainity in depth map
+	'''
+	
+	u=np.append(u,np.ones(1)) #Convert to homogeneous
+
 	V = D * np.matmul(cam_matrix_inv,u) #World point
-	V.append(1)
+	V.=np.append(V,np.ones(1))
+
 	u_prop = np.matmul(cam_matrix,T)
 	u_prop = np.matmul(u_prop,V)
 	u_prop = u_prop/u_prop[2]
-	u_prop.pop()
+	u_prop=u_prop[:-1]
+
 	U = D[u[0]][u[1]] - D_prev[u_prop[0]][u_prop[1]]
 	return U**2
 
@@ -202,10 +209,7 @@ def check_keyframe(T):
 	E = np.concatenate(R,t) # 12 dimensional 	
 	temp = matmul(W,E)
 	temp = matmul(E.transpose(),temp)
-	if temp>=threshold:
-		return 1
-	else
-		return 0
+	return temp>=threshold
 
 def _delay():
 	time.sleep(60) #Change later
