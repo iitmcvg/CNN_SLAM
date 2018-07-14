@@ -37,7 +37,32 @@ def _post_process_disparity(disp):
     r_mask = np.fliplr(l_mask)
     return r_mask * l_disp + l_mask * r_disp + (1.0 - l_mask - r_mask) * m_disp
 
-def get_depth_map(image_array,checkpoint_path,encoder="resnet50"):
+def init_monodepth(checkpoint_path):
+    '''
+    Intialises a monodepth session.
+
+    Returns session.
+    '''
+    # SESSION
+    config = tf.ConfigProto(allow_soft_placement=True)
+    sess = tf.Session(config=config)
+
+    # SAVER
+    train_saver = tf.train.Saver()
+
+    # INIT
+    sess.run(tf.global_variables_initializer())
+    sess.run(tf.local_variables_initializer())
+    coordinator = tf.train.Coordinator()
+    threads = tf.train.start_queue_runners(sess=sess, coord=coordinator)
+
+    # RESTORE
+    restore_path = checkpoint_path.split(".")[0]
+    train_saver.restore(sess, restore_path)
+
+    return sess
+
+def get_depth_map(sess,image_array,encoder="resnet50"):
     '''
     Returns monocular depth map
 
@@ -75,28 +100,9 @@ def get_depth_map(image_array,checkpoint_path,encoder="resnet50"):
     input_image = input_image.astype(np.float32) / 255
     input_images = np.stack((input_image, np.fliplr(input_image)), 0)
 
-    # SESSION
-    config = tf.ConfigProto(allow_soft_placement=True)
-    sess = tf.Session(config=config)
-
-    # SAVER
-    train_saver = tf.train.Saver()
-
-    # INIT
-    sess.run(tf.global_variables_initializer())
-    sess.run(tf.local_variables_initializer())
-    coordinator = tf.train.Coordinator()
-    threads = tf.train.start_queue_runners(sess=sess, coord=coordinator)
-
-    # RESTORE
-    restore_path = checkpoint_path.split(".")[0]
-    train_saver.restore(sess, restore_path)
-
     disp = sess.run(model.disp_left_est[0], feed_dict={left: input_images})
     disp_pp = _post_process_disparity(disp.squeeze()).astype(np.float32)
 
     disp_to_img = scipy.misc.imresize(disp_pp.squeeze(), [original_height, original_width])
-
-    del sess
 
     return disp_to_img

@@ -1,15 +1,31 @@
+'''
+Camera Pose Estimation
+'''
+
+# Libraries
 import numpy as np 
 import cv2
 import tensorflow as tf
 import sys
 import time
+import argparse
+
+# Modules
 import pose_estimation.refine_depth_map 
 import pose_estimation.depth_map_fusion 
-import
+from pose_estimation import monodepth
 
 im_size = (480,640)
 sigma_p = 0 # Some white noise variance thing
 index_matrix = np.dstack(np.meshgrid(np.arange(480),np.arange(640),indexing = 'ij'))
+
+parser = argparse.ArgumentParser(description='Monodepth TensorFlow implementation.')
+
+parser.add_argument('--mono_checkpoint_path',  type=str,   help='path to a specific checkpoint to load',required=True)
+parser.add_argument('--input_height',     type=int,   help='input height', default=480)
+parser.add_argument('--input_width',      type=int,   help='input width', default=640)
+
+args = parser.parse_args()
 
 class Keyframe:
 	def __init__(self, pose, depth, uncertainty, image):
@@ -37,8 +53,6 @@ def get_camera_matrix(path=None):
 		return np.load(path)
 	else:
 		return np.eye(3)
-
-def get_cnn_depth(): #To get CNN predicted depth from an image
 
 
 def find_uncertainty(u,D,D_prev,T):
@@ -190,6 +204,10 @@ def exit_program():
 	sys.exit(0)
 
 def main():
+
+	# INIT monodepth session
+	monodepth.init_monodepth(args.mono_checkpoint_path)
+	
 	cam_matrix = get_camera_matrix()
 	cam_matrix_inv = np.linalg.inv(cam_matrix)
 
