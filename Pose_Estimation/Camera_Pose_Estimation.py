@@ -27,6 +27,10 @@ parser.add_argument('--input_width',      type=int,   help='input width', defaul
 
 args = parser.parse_args()
 
+# Video cam
+cam = cv2.VideoCapture(0)
+
+
 class Keyframe:
 	def __init__(self, pose, depth, uncertainty, image):
 		self.T = pose # 3x4 transformation matrix
@@ -35,11 +39,17 @@ class Keyframe:
 		self.I = image
 
 def get_camera_image():
-	cam = cv2.VideoCapture(0)
+	'''
+	Returns:
+
+	* ret: Whether camera captured or not 
+	* frame: 3 channel image
+	* frame_grey greyscale
+	'''
 	ret,frame = cam.read()
-	frame = cv2.cvtColor(frame,cv2.COLOR_BGR2GRAY) #Using single channel image
-	frame_ar = np.array(frame)
-	return ret,frame_ar,frame
+	frame_grey = cv2.cvtColor(frame,cv2.COLOR_BGR2GRAY) #Using single channel image
+
+	return ret,frame,frame_grey
 
 def get_camera_matrix(path=None): 
 	'''
@@ -197,47 +207,53 @@ def check_keyframe(T):
 	else
 		return 0
 
-def put_delay():
+def _delay():
 	time.sleep(60) #Change later
 
-def exit_program():
+def _exit_program():
 	sys.exit(0)
 
 def main():
 
 	# INIT monodepth session
-	monodepth.init_monodepth(args.mono_checkpoint_path)
-	
+	sess=monodepth.init_monodepth(args.mono_checkpoint_path)
+
+	# INIT camera matrix
 	cam_matrix = get_camera_matrix()
 	cam_matrix_inv = np.linalg.inv(cam_matrix)
 
-	ret,frame,image = get_camera_image() #frame is a numpy array
-	K = [] #Will be a list of keyframe objects
-	ini_depth = get_cnn_depth(frame)
+	# Image is 3 channel, frame is greyscale
+	ret,image,frame = get_camera_image() #frame is a numpy array
+
+	# List of keyframe object
+	K = [] 
+
+	ini_depth = monodepth.get_cnn_depth(sess,image)
 	ini_uncertainty = get_initial_uncertainty()
 	ini_pose = get_initial_pose()
 	K.append(Keyframe(ini_pose,ini_depth,ini_uncertainty,frame)) #First Keyframe appended
 	cur_keyframe = K[0]
 	cur_index = 0
+
 	while(True): #Loop for keyframes
 		while(True): #Loop for normal frames
-			ret,frame,image = get_camera_image() #frame is the numpy array
+			ret,image,frame = get_camera_image() #frame is the numpy array
 			if not ret:
-				exit_program()
+				_exit_program()
 			u = get_highgrad_element(image) #consists of a list of points. Where a point is a list of length 2.
 			T = minimize_cost_func(u,frame,cur_keyframe) 
 			if check_keyframe(T):                    
-				depth = get_cnn_depth(frame)	
+				depth = monodepth.get_cnn_depth(sess,image)	
 				cur_index += 1
 				uncertainty = get_uncertainty(T,D,K[cur_index - 1])
 				K.append(Keyframe(T,depth,uncertainty,frame))
 				K[cur_index].D,K[cur_index].U = fuse_depth_map(K[cur_index],K[cur_index - 1])
 				cur_keyframe = K[cur_index]
-				put_delay()
+				_delay()
 				break
 			else:
 				cur_keyframe.D,cur_keyframe.U = refine_depth_map(frame,T,cur_keyframe)
-				put_delay()
+				_delay()
 
 if__name__ == "__main__":
 	main()
