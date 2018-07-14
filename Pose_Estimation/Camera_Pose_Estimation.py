@@ -5,6 +5,7 @@ import sys
 import time
 import pose_estimation.refine_depth_map 
 import pose_estimation.depth_map_fusion 
+import
 
 im_size = (480,640)
 sigma_p = 0 # Some white noise variance thing
@@ -24,11 +25,18 @@ def get_camera_image():
 	frame_ar = np.array(frame)
 	return ret,frame_ar,frame
 
-def get_camera_matrix(): #Change to read from camera calib file
-	return np.zeros((3,3))
+def get_camera_matrix(path=None): 
+	'''
+	Read intrinsic matrix from npy file.
 
-cam_matrix = get_camera_matrix()
-cam_matrix_inv = np.linalg.inv(cam_matrix)
+	Change to read from camera calib file.
+
+	Use identity matrix for testing.
+	'''
+	if path:
+		return np.load(path)
+	else:
+		return np.eye(3)
 
 def get_cnn_depth(): #To get CNN predicted depth from an image
 
@@ -182,6 +190,9 @@ def exit_program():
 	sys.exit(0)
 
 def main():
+	cam_matrix = get_camera_matrix()
+	cam_matrix_inv = np.linalg.inv(cam_matrix)
+
 	ret,frame,image = get_camera_image() #frame is a numpy array
 	K = [] #Will be a list of keyframe objects
 	ini_depth = get_cnn_depth(frame)
