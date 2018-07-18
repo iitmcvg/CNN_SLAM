@@ -138,6 +138,16 @@ def calc_photo_residual_uncertainty(u,frame,cur_keyframe,T):
 	return sigma
 
 def huber_norm(x):
+	'''
+	Calculates and Returns the huber norm
+
+	Arguments:
+		x: Input
+
+	Returns:
+		Huber norm of x
+	'''
+	
 	delta = 1 #Change later
 	if abs(x)<delta:
 		return 0.5*(x**2)
@@ -153,12 +163,38 @@ def calc_cost_func(u,frame,cur_keyframe,T): #Calculates the aggregate cost (not 
 """
 
 def calc_cost(u,frame,cur_keyframe,T):
+	'''
+	Calculates the residual error.
+
+	Arguments:
+		u: A list containing the high gradient elements
+		frame: Numpy array o the current frame
+		cur_keyframe: Previous keyframe as a Keyframe class
+		T: Current estimated Pose
+
+	Returns:
+		r: Residual error as a list
+	'''
+
 	r = []
 	for i in u:
 		r.append(huber_norm(calc_photo_residual(i,frame,cur_keyframe,T)/calc_photo_residual_uncertainty(i,frame,cur_keyframe,T))) #Is it uncertainty or something else?
 	return r
 
-def calc_cost_jacobian(u,frame,cur_keyframe,T_s): #Use just for calculating the Jacobian
+def calc_cost_jacobian(u,frame,cur_keyframe,T_s): 
+	'''
+	Calculates the residual error for the Jacobian
+
+	Arguments:
+		u: A list containing the high gradient elements
+		frame: Numpy array o the current frame
+		cur_keyframe: Previous keyframe as a Keyframe class
+		T_s: Current estimated Pose as a flattened numpy array
+
+	Returns:
+		r: Residual error as a list
+	'''
+
 	T = np.reshape(T_s,(3,4))
 	r = []
 	for i in u:
@@ -166,6 +202,20 @@ def calc_cost_jacobian(u,frame,cur_keyframe,T_s): #Use just for calculating the 
 	return r
 
 def get_jacobian(dof,u,frame,cur_keyframe,T):
+	'''
+	Returns the Jacobian of the Residual Error wrt the Pose
+
+	Arguments:
+		dof: Number of high gradient elements we are using
+		u: A list containing the high gradient elements
+		frame: Numpy array o the current frame
+		cur_keyframe: Previous keyframe as a Keyframe class
+		T: Current estimated Pose
+
+	Returns:
+		J: The required Jacobian
+	'''
+
 	T_s = T.flatten()
 	T_c = tf.constant(T_s) #Flattened pose in tf
 	r_s = calc_cost_jacobian(u,frame,keyframe,T_c)
@@ -174,15 +224,48 @@ def get_jacobian(dof,u,frame,cur_keyframe,T):
 	return J
 
 def get_W(dof,stack_r):
+	'''
+	Returns the weight matrix for weighted Gauss-Newton Optimization
+
+	Arguments:
+		dof: Number of high gradient elements we are using
+		stack_r: The stacked residual error as a numpy array (of length dof)
+
+	Returns:
+		W: Weight Matrix
+	'''
+
 	W = np.zeros((dof,dof))
 	for i in range(dof):
 		W[i][i] = (dof + 1)/(dof + stack_r[i]**2)
 	return W
 
 def exit_crit(delT):
+	'''
+	Checks for the when to exit the loop while doing Gauss - Newton Optimization
+	
+	Arguments: 
+		delT: The right multiplied increment of the pose
+
+	Returns:
+		1(to exit) or 0(not to exit)
+	'''
 
 
-def minimize_cost_func(u,frame, cur_keyframe): #Does Weighted Gauss-Newton Optimization
+
+def minimize_cost_func(u,frame, cur_keyframe):
+	'''
+	Does Weighted Gauss-Newton Optimization
+
+	Arguments:
+		u: List of points in high gradient areas of the current frame
+		frame: Current frame(as a Numpy array)
+		cur_keyframe: The previous keyframe of the Keyframe Class
+
+	Returns:
+		T: The camera Pose
+	'''
+
 	dof = len(u)
 	T = np.zeros((3,4)) #Do random initialization later
 	while(1):
@@ -201,6 +284,16 @@ def minimize_cost_func(u,frame, cur_keyframe): #Does Weighted Gauss-Newton Optim
 	return T
 
 def check_keyframe(T):
+	'''
+	Checks the Pose of a new frame to see if it is a keyframe(if the camera has moved too far from the previous keyframe)
+
+	Arguments: 
+		T: Pose of new frame wrt to prev keyframe
+
+	Returns:
+		Either 1(is a keyframe) or 0(not a keyframe)
+	'''
+
 	W = np.zeros((12,12)) #Weight Matrix
 	threshold = 0
 	R = T[:3][:3]
@@ -212,6 +305,10 @@ def check_keyframe(T):
 	return temp>=threshold
 
 def _delay():
+	'''
+	Adds a time delay
+	'''
+
 	time.sleep(60) #Change later
 
 def _exit_program():
