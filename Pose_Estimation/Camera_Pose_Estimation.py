@@ -67,9 +67,16 @@ def get_camera_matrix(path=None):
 
 def find_uncertainty(u,D,D_prev,T):
 	'''
-	Finds uncertainity in depth map
+	Finds uncertainty for one element of new keyframe
+
+	Arguments:
+		u: Pixel location
+		D: New keyframe's depth map
+		D_prev: Previous keyframe's depth map
+		T: Pose of new keyframe
+
+	Returns: Uncertainty at position u
 	'''
-	
 	u=np.append(u,np.ones(1)) #Convert to homogeneous
 
 	V = D * np.matmul(cam_matrix_inv,u) #World point
@@ -84,6 +91,17 @@ def find_uncertainty(u,D,D_prev,T):
 	return U**2
 
 def get_uncertainty(T,D,prev_keyframe):
+	'''
+	Finds the uncertainty map for a new keyframe
+
+	Arguments:
+		T: Pose of new keyframe
+		D: Depth map of new keyframe
+		prev_keyframe: Previous keyframe of Keyframe class
+
+	Returns:
+		U: Uncertainty map
+	'''
 	T = np.matmul(np.linalg.inv(T),prev_keyframe.T) #Check if this is right
 	find_uncertainty_v = np.vectorize(find_uncertainty)
 	U = find_uncertainty_v(index_matrix,D,prev_keyframe.D,T) #Check
@@ -95,7 +113,16 @@ def get_initial_uncertainty(): #To get uncertainty map for the first frame
 def get_initial_pose(): #Pose for the first frame
 
 
-def get_highgrad_element(img): #Test this out separately
+def get_highgrad_element(img):
+	'''
+	Finds high gradient areas in the image
+
+	Arguments:
+		img: Input image
+
+	Returns:
+		u: List of pixel locations
+	'''
 	threshold_grad = 100 #Change later
 	laplacian = cv2.Laplacian(img,cv2.CV_8U)
 	ret,thresh = cv2.threshold(laplacian,threshold_grad,255,cv2.THRESH_BINARY)
@@ -103,6 +130,18 @@ def get_highgrad_element(img): #Test this out separately
 	return u
 
 def calc_photo_residual(i,frame,cur_keyframe,T):
+	'''
+	Calculates the photometric residual for one point
+
+	Arguments:
+		i: Pixel location
+		frame: Current frame as numpy array
+		cur_keyframe: Previous keyframe as Keyframe object
+		T: Estimated pose
+
+	Returns:
+		r: Photometri residual
+	'''
 	i.append(1) #Make i homogeneous
 	V = cur_keyframe.D[i[0]][i[1]] * np.matmul(cam_matrix_inv,i) #3D point
 	V.append(1) #Make V homogeneous
@@ -114,6 +153,19 @@ def calc_photo_residual(i,frame,cur_keyframe,T):
 	return r
 
 def calc_photo_residual_d(u,D,T,frame,cur_keyframe): #For finding the derivative only
+	'''
+	Calculates photometric residual but only for finding the derivative
+
+	Arguments:
+		u: High gradient pixel location
+		D: Depth value in previous keyframe at u
+		T: Estimated pose
+		frame: current frame as numpy array
+		cur_keyframe: Previous keyframe as a Keyframe object
+
+	Returns:
+		r: Photometric residual
+	'''
 	u.append(1)
 	V = D*np.matmul(cam_matrix_inv,i)
 	V.append(1)
@@ -125,6 +177,18 @@ def calc_photo_residual_d(u,D,T,frame,cur_keyframe): #For finding the derivative
 	return r 
 
 def delr_delD(u,frame,cur_keyframe,T):
+	'''
+	Finds the derivative of the photometric residual wrt depth
+
+	Arguments:
+		u: High gradient pixel location
+		frame: Current frame as numpy array
+		cur_keyframe: Previous keyframe as a Keyframe object
+		T: Estimated pose
+
+	Returns:
+		delr: The derivative
+	'''
 	D = tf.constant(cur_keyframe.D[u[0]][u[1]])
 	r = calc_photo_residual_d(u,D,T,frame,cur_keyframe)
 	delr = 0
@@ -133,6 +197,18 @@ def delr_delD(u,frame,cur_keyframe,T):
 	return delr
 
 def calc_photo_residual_uncertainty(u,frame,cur_keyframe,T):
+	'''
+	Calculates the photometric residual uncertainty
+
+	Arguments:
+		u: High gradient pixel location
+		frame: Current frame as a numpy array
+		cur_keyframe: Previous keyframe as a Keyframe object
+		T: Estimated pose
+
+	Returns:
+		sigma: Residual uncertainty
+	'''
 	deriv = delr_delD(u,frame,cur_keyframe,T)
 	sigma = (sigma_p**2 + (deriv**2)*cur_keyframe.U[u[0]][u[1]])**0.5
 	return sigma
@@ -146,8 +222,7 @@ def huber_norm(x):
 
 	Returns:
 		Huber norm of x
-	'''
-	
+	'''	
 	delta = 1 #Change later
 	if abs(x)<delta:
 		return 0.5*(x**2)
@@ -175,7 +250,6 @@ def calc_cost(u,frame,cur_keyframe,T):
 	Returns:
 		r: Residual error as a list
 	'''
-
 	r = []
 	for i in u:
 		r.append(huber_norm(calc_photo_residual(i,frame,cur_keyframe,T)/calc_photo_residual_uncertainty(i,frame,cur_keyframe,T))) #Is it uncertainty or something else?
@@ -194,7 +268,6 @@ def calc_cost_jacobian(u,frame,cur_keyframe,T_s):
 	Returns:
 		r: Residual error as a list
 	'''
-
 	T = np.reshape(T_s,(3,4))
 	r = []
 	for i in u:
@@ -215,7 +288,6 @@ def get_jacobian(dof,u,frame,cur_keyframe,T):
 	Returns:
 		J: The required Jacobian
 	'''
-
 	T_s = T.flatten()
 	T_c = tf.constant(T_s) #Flattened pose in tf
 	r_s = calc_cost_jacobian(u,frame,keyframe,T_c)
@@ -234,7 +306,6 @@ def get_W(dof,stack_r):
 	Returns:
 		W: Weight Matrix
 	'''
-
 	W = np.zeros((dof,dof))
 	for i in range(dof):
 		W[i][i] = (dof + 1)/(dof + stack_r[i]**2)
@@ -265,7 +336,6 @@ def minimize_cost_func(u,frame, cur_keyframe):
 	Returns:
 		T: The camera Pose
 	'''
-
 	dof = len(u)
 	T = np.zeros((3,4)) #Do random initialization later
 	while(1):
@@ -293,7 +363,6 @@ def check_keyframe(T):
 	Returns:
 		Either 1(is a keyframe) or 0(not a keyframe)
 	'''
-
 	W = np.zeros((12,12)) #Weight Matrix
 	threshold = 0
 	R = T[:3][:3]
@@ -312,6 +381,9 @@ def _delay():
 	time.sleep(60) #Change later
 
 def _exit_program():
+	'''
+	Exits the program
+	'''
 	sys.exit(0)
 
 def main():
@@ -329,21 +401,29 @@ def main():
 	# List of keyframe object
 	K = [] 
 
+	#Append first frame to K
 	ini_depth = monodepth.get_cnn_depth(sess,image)
 	ini_uncertainty = get_initial_uncertainty()
 	ini_pose = get_initial_pose()
-	K.append(Keyframe(ini_pose,ini_depth,ini_uncertainty,frame)) #First Keyframe appended
+	K.append(Keyframe(ini_pose,ini_depth,ini_uncertainty,frame)) 
 	cur_keyframe = K[0]
 	cur_index = 0
 
 	while(True): #Loop for keyframes
+
 		while(True): #Loop for normal frames
+
 			ret,image,frame = get_camera_image() #frame is the numpy array
+
 			if not ret:
 				_exit_program()
-			u = get_highgrad_element(image) #consists of a list of points. Where a point is a list of length 2.
-			T = minimize_cost_func(u,frame,cur_keyframe) 
-			if check_keyframe(T):                    
+
+			u = get_highgrad_element(image) #Finds the high gradient pixel locations in the current frame
+			T = minimize_cost_func(u,frame,cur_keyframe) #Finds pose of current frame by minimizing photometric residual
+
+			if check_keyframe(T):
+				
+				#If it is a keyframe, add it to K after finding depth and uncertainty map                    
 				depth = monodepth.get_cnn_depth(sess,image)	
 				cur_index += 1
 				uncertainty = get_uncertainty(T,D,K[cur_index - 1])
@@ -352,7 +432,9 @@ def main():
 				cur_keyframe = K[cur_index]
 				_delay()
 				break
+
 			else:
+				#If it is not a keyframe do small baseline stereo matching to refine the depth map of previous keyframe
 				cur_keyframe.D,cur_keyframe.U = refine_depth_map(frame,T,cur_keyframe)
 				_delay()
 
