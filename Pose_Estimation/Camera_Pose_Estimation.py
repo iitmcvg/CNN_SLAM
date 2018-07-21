@@ -427,14 +427,15 @@ def main():
 				cur_index += 1
 				uncertainty = get_uncertainty(T,D,K[cur_index - 1])
 				K.append(Keyframe(T,depth,uncertainty,frame))
-				K[cur_index].D,K[cur_index].U = fuse_depth_map(K[cur_index],K[cur_index - 1])
+				K[cur_index] = fuse_depth_map(K[cur_index],K[cur_index - 1])
 				cur_keyframe = K[cur_index]
 				_delay()
 				break
 
 			else:
 				#If it is not a keyframe do small baseline stereo matching to refine the depth map of previous keyframe
-				cur_keyframe.D,cur_keyframe.U = refine_depth_map(frame,T,cur_keyframe)
+				K[cur_index] = refine_depth_map(frame,T,cur_keyframe)
+				cur_keyframe = K[cur_index]
 				_delay()
 
 if__name__ == "__main__":
