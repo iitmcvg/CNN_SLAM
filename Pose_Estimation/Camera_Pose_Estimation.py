@@ -142,7 +142,7 @@ def calc_photo_residual(i,frame,cur_keyframe,T):
 	Returns:
 		r: Photometri residual
 	'''
-	i.append(1) #Make i homogeneous
+	i = np.append(i,np.ones(1)) #Make i homogeneous
 	V = cur_keyframe.D[i[0]][i[1]] * np.matmul(cam_matrix_inv,i) #3D point
 	V.append(1) #Make V homogeneous
 	u_prop = np.matmul(T,V) #3D point in the real world shifted
@@ -166,7 +166,7 @@ def calc_photo_residual_d(u,D,T,frame,cur_keyframe): #For finding the derivative
 	Returns:
 		r: Photometric residual
 	'''
-	u.append(1)
+	u = np.append(u,np.ones(1))
 	V = D*np.matmul(cam_matrix_inv,i)
 	V.append(1)
 	u_prop = np.matmul(T,V)
@@ -193,7 +193,7 @@ def delr_delD(u,frame,cur_keyframe,T):
 	r = calc_photo_residual_d(u,D,T,frame,cur_keyframe)
 	delr = 0
 	with tf.Session() as sess:
-		delr = tf.gradients(r,D)
+		_,delr = tf.test.compute_gradient(r,(1),D,(1))
 	return delr
 
 def calc_photo_residual_uncertainty(u,frame,cur_keyframe,T):
@@ -322,8 +322,7 @@ def exit_crit(delT):
 		1(to exit) or 0(not to exit)
 	'''
 
-
-
+#Check Lie-algebra
 def minimize_cost_func(u,frame, cur_keyframe):
 	'''
 	Does Weighted Gauss-Newton Optimization
@@ -396,7 +395,7 @@ def main():
 	cam_matrix_inv = np.linalg.inv(cam_matrix)
 
 	# Image is 3 channel, frame is greyscale
-	ret,image,frame = get_camera_image() #frame is a numpy array
+	ret,image,frame = get_camera_image()
 
 	# List of keyframe object
 	K = [] 
