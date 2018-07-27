@@ -429,6 +429,10 @@ def main():
 				K.append(Keyframe(T,depth,uncertainty,frame))
 				K[cur_index] = fuse_depth_map(K[cur_index],K[cur_index - 1])
 				cur_keyframe = K[cur_index]
+
+				update_pose_graph() #Need to write
+				do_graph_optimization() #Need to write
+
 				_delay()
 				break
 
