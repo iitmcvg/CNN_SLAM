@@ -274,6 +274,18 @@ def calc_cost_jacobian(u,frame,cur_keyframe,T_s):
 		r.append(huber_norm(calc_photo_residual(i,frame,cur_keyframe,T)/calc_photo_residual_uncertainty(i,frame,cur_keyframe,T)))
 	return r
 
+def get_min_rep(T):
+	'''
+	Converts the pose to its minimal representation (epsilon)
+
+	Arguments:
+		T: Input pose
+
+	Returns: 
+		T_s: Minimal representation of pose
+	'''
+	
+	
 def get_jacobian(dof,u,frame,cur_keyframe,T):
 	'''
 	Returns the Jacobian of the Residual Error wrt the Pose
@@ -288,7 +300,7 @@ def get_jacobian(dof,u,frame,cur_keyframe,T):
 	Returns:
 		J: The required Jacobian
 	'''
-	T_s = T.flatten()
+	T_s = get_min_rep(T)
 	T_c = tf.constant(T_s) #Flattened pose in tf
 	r_s = calc_cost_jacobian(u,frame,keyframe,T_c)
 	with tf.Session() as sess:
