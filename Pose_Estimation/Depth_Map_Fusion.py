@@ -5,7 +5,18 @@ import sys
 import time
 
 def actual_fuse(u,frame,prev_keyframe):
-	u.append(1)
+	'''
+	Does the actual fusion of depth and uncertainty map
+
+	Arguments:
+		u: Pixel location
+		frame: current keyframe of Keyframe class
+		prev_keyframe: Previous keyframe of Keyframe class
+
+	Returns:
+		Depth and Uncertainty map values at u
+	'''
+	u = np.append(u,np.ones(1))
 	v_temp = frame.D[u[0]][u[1]]*np.matmul(cam_matrix_inv,u) #Returns 3x1 point
 	v_temp.appenf(1)
 	v_temp = np.matmul(np.matmul(np.linalg.inv(frame.T),prev_keyframe.T),v_temp) #Return 3x1
@@ -18,6 +29,16 @@ def actual_fuse(u,frame,prev_keyframe):
 	return frame.D[u[0]][u[1]],frame.U[u[0]][u[1]]
 
 def fuse_depth_map(frame,prev_keyframe):
+	'''
+	Fuses depth map for new keyframe
+
+	Arguments:
+		frame: New keyframe of Keyframe class
+		prev_keyframe: Previous keyframe of Keyframe class
+
+	Returns:
+		The new keyframe as Keyframe object
+	'''
 	actual_fuse_v = vectorize(actual_fuse)
 	frame.D,frame.U = actual_fuse_v(index_matrix,frame,prev_keyframe)
 	return frame.D,frame.U
