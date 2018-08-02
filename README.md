@@ -6,7 +6,27 @@
 ---
 Blog:  [iitmcvg.github.io](http://iitmcvg.github.io/)
 
-This repository contains content that we use for various topics and sessions.
+This repository contains content that we use for SLAM.
+
+---
+
+## To Do
+
+* [ ] Complete camera pose estimation.
+* [ ] Monocular depth methods library.
+* [ ] Freeze graphs for inference. 
+
+---
+
+## G3docs
+
+* [Monodepth](g3docs/monodepth.md)
+
+---
+
+## Monodepth checkpoints
+
+----
 
 ## References
 

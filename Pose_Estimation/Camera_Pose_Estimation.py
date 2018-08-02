@@ -33,10 +33,63 @@ cam = cv2.VideoCapture(0)
 
 class Keyframe:
 	def __init__(self, pose, depth, uncertainty, image):
-		self.T = pose # 3x4 transformation matrix
+		self.T = pose # 4x4 transformation matrix # 6 vector
 		self.D = depth
 		self.U = uncertainty
 		self.I = image
+
+	def _isRotationMatrix(self,R) :
+		'''
+		Checks if a matrix is a valid rotation matrix.
+		'''
+		Rt = np.transpose(R)
+		shouldBeIdentity = np.dot(Rt, R)
+		I = np.identity(3, dtype = R.dtype)
+		n = np.linalg.norm(I - shouldBeIdentity)
+		return n < 1e-6
+	
+
+	def _extract_angles(self):
+		'''
+		Extract rotation angles
+
+		Returns: aplha, beta, gamma (as np array)
+		'''
+
+		assert(self._isRotationMatrix(R))
+     
+		sy = math.sqrt(R[0,0] * R[0,0] +  R[1,0] * R[1,0])
+		
+		singular = sy < 1e-6
+	
+		if  not singular :
+			x = math.atan2(R[2,1] , R[2,2])
+			y = math.atan2(-R[2,0], sy)
+			z = math.atan2(R[1,0], R[0,0])
+		else :
+			x = math.atan2(-R[1,2], R[1,1])
+			y = math.atan2(-R[2,0], sy)
+			z = 0
+	
+		return np.array([x, y, z])
+
+	@property
+	def T_vec(self):
+		'''
+		Convert 4*4 matrix into 6*1 vector
+
+		[x y z alpha beta gamma]
+	
+		'''
+
+		t=self.T[:3,3].T
+		x,y,z=t
+
+		angles=self._extract_angles()
+
+		self.T-vec=np.zeros(6)
+		self.T_vec[:3]=t
+		self.T_vec[:3]=angles
 
 def get_camera_image():
 	'''
@@ -143,14 +196,6 @@ def huber_norm(x):
 		return 0.5*(x**2)
 	else 
 		return delta*(abs(a) - (delta/2))
-
-"""
-def calc_cost_func(u,frame,cur_keyframe,T): #Calculates the aggregate cost (not as a list)
-	sum = 0
-	for i in u:
-		sum = sum + huber_norm(w[i]*calc_photo_residual(i,frame,cur_keyframe,T)/calc_photo_residual_uncertainty(i,frame,cur_keyframe,T))
-	return sum
-"""
 
 def calc_cost(u,frame,cur_keyframe,T):
 	r = []
