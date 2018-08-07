@@ -1,5 +1,6 @@
 #Change u to be a numpy array
 #Check for loss of precision while converting u to int
+#do compute_gradient
 
 '''
 Camera Pose Estimation
@@ -79,9 +80,9 @@ class Keyframe:
 
 		angles=self._extract_angles()
 
-		self.T_vec=np.zeros(6)
-		self.T_vec[:3]=t
-		self.T_vec[:3]=angles
+		self.T_vect=np.zeros(6)
+		self.T_vect[:3]=t
+		self.T_vect[:3]=angles
 
 def find_uncertainty(u,D,D_prev,T):
 	'''
@@ -206,10 +207,10 @@ def calc_photo_residual_d(u,D,T,frame,cur_keyframe): #For finding the derivative
 	'''
 	u = np.append(u,np.ones(1))
 	u = u.astype(int)
-	V = D*np.matmul(cam_matrix_inv,u)
-	V = np.append(V,1)	
-	u_prop = np.matmul(T,V)[:3]
-	u_prop = np.matmul(cam_matrix,u_prop)
+	Vp = D*np.matmul(cam_matrix_inv,u)
+	Vp = np.append(Vp,1)
+	u_prop = np.matmul(T,Vp)[:3]
+	u_prop = np.matmul(tf.constant(cam_matrix),tf.constant(u_prop))
 	u_prop = (u_prop/u_prop[2])[:2]
 	u_prop = u_prop.astype(int)
 	r = cur_keyframe.I[u[0]][u[1]] - frame[u_prop[0]][u_prop[1]]
@@ -228,13 +229,14 @@ def delr_delD(u,frame,cur_keyframe,T):
 	Returns:
 		delr: The derivative
 	'''
+	u = u.astype(int)
 	D = tf.constant(cur_keyframe.D[u[0]][u[1]])
 	
 	delr = 0
+
 	with tf.Session() as sess:
-		D_arr = sess.run(D)
-		r = calc_photo_residual_d(u,D_arr,T,frame,cur_keyframe)
-		_,delr = tf.test.compute_gradient(r,(1),D,(1))
+		r = tf.constant(float(calc_photo_residual_d(u,D,T,frame,cur_keyframe)))
+		_,delr = tf.test.compute_gradient(D,(),r,(),np.array(cur_keyframe.D[u[0]][u[1]]),0.001,None,None)
 	return delr
 
 def calc_photo_residual_uncertainty(u,frame,cur_keyframe,T):
@@ -268,7 +270,7 @@ def huber_norm(x):
 	if abs(x)<delta:
 		return 0.5*(x**2)
 	else:
-		return delta*(abs(a) - (delta/2))
+		return delta*(abs(x) - (delta/2))
 
 def calc_cost(u,frame,cur_keyframe,T):
 	'''
