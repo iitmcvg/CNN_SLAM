@@ -1,3 +1,5 @@
+#Change u to be a numpy array
+
 '''
 Camera Pose Estimation
 '''
@@ -11,12 +13,14 @@ import time
 import argparse
 
 # Modules
-import pose_estimation.depth_map_fusion as depth_map_fusion
+#import Pose_Estimation.depth_map_fusion as depth_map_fusion
 #import pose_estimation.monodepth as monodepth
 
 im_size = (480,640)
 sigma_p = 0 # Some white noise variance thing
 index_matrix = np.dstack(np.meshgrid(np.arange(480),np.arange(640),indexing = 'ij'))
+cam_matrix = np.eye(3,3) #Change later
+cam_matrix_inv = np.eye(3,3) #Change later
 
 class Keyframe:
 	def __init__(self, pose, depth, uncertainty, image):
@@ -159,13 +163,13 @@ def calc_photo_residual(i,frame,cur_keyframe,T):
 		T: Estimated pose
 
 	Returns:
-		r: Photometri residual
+		r: Photometric residual
 	'''
 	# Make i homogeneous
 	i = np.append(i,np.ones(1)) 
-
+	i = i.astype(int)
 	#3D point 3*1
-	V = cur_keyframe.D[i[0]][i[1]] * np.matmul(cam_matrix_inv,i) 
+	V = cur_keyframe.D[i[0]][[1]] * np.matmul(cam_matrix_inv,i) 
 
 	#Make V homogeneous 4*1
 	V=np.append(V,1)
@@ -178,9 +182,9 @@ def calc_photo_residual(i,frame,cur_keyframe,T):
 
 	# Projection onto image plane
 	u_prop = (u_prop/u_prop[2])[:2] 
-
+	u_prop = u_prop.astype(int)
 	# Residual width*height
-	r = (cur_keyframe.I[i[0]][i[1]] - frame.I[u_prop[0]][u_prop[1]])
+	r = (cur_keyframe.I[i[0]][i[1]] - frame[u_prop[0]][u_prop[1]])
 
 	return r
 
@@ -358,7 +362,6 @@ def exit_crit(delT):
 		1(to exit) or 0(not to exit)
 	'''
 
-#Check Lie-algebra
 def minimize_cost_func(u,frame, cur_keyframe):
 	'''
 	Does Weighted Gauss-Newton Optimization
@@ -421,7 +424,7 @@ def _exit_program():
 	'''
 	sys.exit(0)
 
-def test():
+def test_highgrad():
 	im_x,im_y=im_size
 	dummy_image=np.uint8(np.random.random((im_x,im_y,3))*256)
 
@@ -439,5 +442,22 @@ def test():
 	# Test high  grad
 	print("Testing high grad",get_highgrad_element(dummy_image_grey))
 
+def test_min_cost_func():
+	im_x,im_y = im_size
+	u_test = np.array([[5,4],[34,56],[231,67],[100,100],[340,237]])
+	frame_test = np.uint8(np.random.random((im_x,im_y))*256)
+	cur_key_test_im = np.uint8(np.random.random((im_x,im_y,3))*256)
+	cur_key_test_im_grey = (cur_key_test_im[:,:,0]+cur_key_test_im[:,:,1]+cur_key_test_im[:,:,2])/3
+	cur_key_test_im_grey = np.uint8(cur_key_test_im_grey)
+
+	cur_key_depth = np.random.random((im_x,im_y))
+	dummy_pose=np.eye(4)[:3]
+	cur_key_unc = np.ones((im_x,im_y))
+
+	cur_key = Keyframe(dummy_pose,cur_key_depth,cur_key_unc,cur_key_test_im_grey)
+
+	print("Testing minimize cost func",minimize_cost_func(u_test,frame_test,cur_key))
+
+
 if __name__=='__main__':
-	test()
+	test_min_cost_func()
