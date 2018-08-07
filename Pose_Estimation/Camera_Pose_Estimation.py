@@ -1,4 +1,5 @@
 #Change u to be a numpy array
+#Check for loss of precision while converting u to int
 
 '''
 Camera Pose Estimation
@@ -184,6 +185,7 @@ def calc_photo_residual(i,frame,cur_keyframe,T):
 	u_prop = (u_prop/u_prop[2])[:2] 
 	u_prop = u_prop.astype(int)
 	# Residual width*height
+
 	r = (cur_keyframe.I[i[0]][i[1]] - frame[u_prop[0]][u_prop[1]])
 
 	return r
@@ -203,13 +205,14 @@ def calc_photo_residual_d(u,D,T,frame,cur_keyframe): #For finding the derivative
 		r: Photometric residual
 	'''
 	u = np.append(u,np.ones(1))
-	V = D*np.matmul(cam_matrix_inv,i)
-	V.append(1)
-	u_prop = np.matmul(T,V)
+	u = u.astype(int)
+	V = D*np.matmul(cam_matrix_inv,u)
+	V = np.append(V,1)	
+	u_prop = np.matmul(T,V)[:3]
 	u_prop = np.matmul(cam_matrix,u_prop)
-	u_prop = u_prop/u_prop[2]
-	u_prop.pop()
-	r = cur_keyframe.I[u[0]][u[1]] - frame.I[u_prop[0]][u_prop[1]]
+	u_prop = (u_prop/u_prop[2])[:2]
+	u_prop = u_prop.astype(int)
+	r = cur_keyframe.I[u[0]][u[1]] - frame[u_prop[0]][u_prop[1]]
 	return r 
 
 def delr_delD(u,frame,cur_keyframe,T):
@@ -226,9 +229,11 @@ def delr_delD(u,frame,cur_keyframe,T):
 		delr: The derivative
 	'''
 	D = tf.constant(cur_keyframe.D[u[0]][u[1]])
-	r = calc_photo_residual_d(u,D,T,frame,cur_keyframe)
+	
 	delr = 0
 	with tf.Session() as sess:
+		D_arr = sess.run(D)
+		r = calc_photo_residual_d(u,D_arr,T,frame,cur_keyframe)
 		_,delr = tf.test.compute_gradient(r,(1),D,(1))
 	return delr
 
@@ -302,18 +307,6 @@ def calc_cost_jacobian(u,frame,cur_keyframe,T_s):
 		r.append(huber_norm(calc_photo_residual(i,frame,cur_keyframe,T)/calc_photo_residual_uncertainty(i,frame,cur_keyframe,T)))
 	return r
 
-def get_min_rep(T):
-	'''
-	Converts the pose to its minimal representation (epsilon)
-
-	Arguments:
-		T: Input pose
-
-	Returns: 
-		T_s: Minimal representation of pose
-	'''
-	
-	
 def get_jacobian(dof,u,frame,cur_keyframe,T):
 	'''
 	Returns the Jacobian of the Residual Error wrt the Pose
@@ -375,7 +368,7 @@ def minimize_cost_func(u,frame, cur_keyframe):
 		T: The camera Pose
 	'''
 	dof = len(u)
-	T = np.zeros((3,4)) #Do random initialization later
+	T = np.ones((3,4)) #Do random initialization later
 	while(1):
 		stack_r = calc_cost(u,frame,cur_keyframe,T)
 		J = get_jacobian(dof,u,frame,cur_keyframe,T)
