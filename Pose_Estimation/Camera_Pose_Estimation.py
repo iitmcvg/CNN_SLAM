@@ -208,11 +208,14 @@ def calc_photo_residual_d(u,D,T,frame,cur_keyframe): #For finding the derivative
 	u = np.append(u,np.ones(1))
 	u = u.astype(int)
 	Vp = D*np.matmul(cam_matrix_inv,u)
-	Vp = np.append(Vp,1)
-	u_prop = np.matmul(T,Vp)[:3]
-	u_prop = np.matmul(tf.constant(cam_matrix),tf.constant(u_prop))
+	Vp = tf.reshape(tf.concat([Vp,tf.constant(np.array([1],np.float64))],0),[4,1]) # 4x1
+	T_t = tf.constant(T) # 3x4
+	
+	u_prop = tf.matmul(T_t,Vp)[:3] #3x1
+	
+	u_prop = tf.matmul(tf.constant(cam_matrix),u_prop)
 	u_prop = (u_prop/u_prop[2])[:2]
-	u_prop = u_prop.astype(int)
+	u_prop = tf.cast(u_prop,tf.int32)
 	r = cur_keyframe.I[u[0]][u[1]] - frame[u_prop[0]][u_prop[1]]
 	return r 
 
@@ -233,7 +236,7 @@ def delr_delD(u,frame,cur_keyframe,T):
 	D = tf.constant(cur_keyframe.D[u[0]][u[1]])
 	
 	delr = 0
-
+	
 	with tf.Session() as sess:
 		r = tf.constant(float(calc_photo_residual_d(u,D,T,frame,cur_keyframe)))
 		_,delr = tf.test.compute_gradient(D,(),r,(),np.array(cur_keyframe.D[u[0]][u[1]]),0.001,None,None)
