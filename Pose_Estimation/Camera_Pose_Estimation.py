@@ -1,6 +1,6 @@
 #Change u to be a numpy array
 #Check for loss of precision while converting u to int
-#do compute_gradient
+# do compute_gradient
 
 '''
 Camera Pose Estimation
