@@ -41,7 +41,7 @@ def test_simple(params):
 
     left  = tf.placeholder(tf.float32, [2, args.input_height, args.input_width, 3])
     model = MonodepthModel(params, "test", left, None)
-    cap = cv2.VideoCapture(video_path)
+    cap = cv2.VideoCapture(args.video_path)
     restore_path = args.checkpoint_path.split(".")[0]
     # SESSION
     config = tf.ConfigProto(allow_soft_placement=True)
