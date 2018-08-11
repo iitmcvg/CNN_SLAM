@@ -252,17 +252,13 @@ def delr_delD(u,frame,cur_keyframe,T):
 	#r = cur_keyframe.I[u[0]][u[1]] - frame[u_prop[0]][u_prop[1]]
 	with tf.Session() as sess:
 		#u_arr = sess.run(u_prop)
-		print sess.run(u_prop)
-		print sess.run([u_prop[0][0],u_prop[1][0]])	
 		u_arr = [u_prop[0][0],u_prop[1][0]]
-		print sess.run(u_arr)
-		print '\n\n\n'
 		#r = tf.cast(tf.constant(cur_keyframe.I[u[0]][u[1]] - frame[u_arr[0][0]][u_arr[1][0]]),tf.float32)
 		r = tf.cast(tf.gather_nd(tf.constant(cur_keyframe.I),u_ten),tf.float32) - tf.cast(tf.gather_nd(tf.constant(frame),u_arr),tf.float32)
 		#print "\n\n",'gay',r,D,"\n\n\n\n"
 		#r = tf.constant(float(calc_photo_residual_d(u,D,T,frame,cur_keyframe)))
-		_,delr = tf.test.compute_gradient(D,(),r,(),np.array(cur_keyframe.D[u[0]][u[1]]),0.001,None,None)
-	return delr
+		#_,delr = tf.test.compute_gradient(D,(),r,(),np.array(cur_keyframe.D[u[0]][u[1]]),0.001,None,None)
+	return 0.001
 
 def calc_photo_residual_uncertainty(u,frame,cur_keyframe,T):
 	'''
