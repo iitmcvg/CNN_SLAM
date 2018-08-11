@@ -21,8 +21,7 @@ def actual_fuse(u,frame,prev_keyframe):
 	v_temp.appenf(1)
 	v_temp = np.matmul(np.matmul(np.linalg.inv(frame.T),prev_keyframe.T),v_temp) #Return 3x1
 	v_temp = np.matmul(cam_matrix,v_temp)
-	v = v_temp/v_temp[2]
-	v.pop()
+	v = (v_temp/v_temp[2])[:2]
 	u_p = (prev_keyframe.D[v[0]][v[1]]*prev_keyframe.U[v[0]][v[1]]/frame.D[u[0]][u[1]]) + sigma_p**2
 	frame.D[u[0]][u[1]] = (u_p*frame.D[u[0]][u[1]] + frame.U[u[0]][u[1]]*prev_keyframe.D[v[0]][v[1]])/(u_p + frame.U[u[0]][u[1]]) #Kalman filter update step 1
 	frame.U[u[0]][u[1]] = u_p*frame.U[u[0]][u[1]]/(u_p + frame.U[u[0]][u[1]]) #Kalman filter update step 2

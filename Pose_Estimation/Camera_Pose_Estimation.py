@@ -1,7 +1,8 @@
-#Change u to be a numpy array
 #Check for loss of precision while converting u to int
-# do compute_gradient
-
+# do compute_gradient all
+#Change get min_rep and getting back (2 cases of getting min rep and getting back normal rep)
+#Check for right and left derivative
+#Change exit criteria
 '''
 Camera Pose Estimation
 '''
@@ -15,8 +16,8 @@ import time
 import argparse
 
 # Modules
-#import Pose_Estimation.depth_map_fusion as depth_map_fusion
-#import pose_estimation.monodepth as monodepth
+import depth_map_fusion as depth_map_fusion
+#import monodepth
 
 im_size = (480,640)
 sigma_p = 0 # Some white noise variance thing
@@ -152,7 +153,7 @@ def get_highgrad_element(img,threshold=100):
 	laplacian = cv2.Laplacian(img,cv2.CV_8U)
 	ret,thresh = cv2.threshold(laplacian,threshold,255,cv2.THRESH_BINARY)
 	u = cv2.findNonZero(thresh)
-	return u
+	return np.array(u)
 
 def calc_photo_residual(i,frame,cur_keyframe,T):
 	'''
@@ -324,7 +325,7 @@ def calc_cost_jacobian(u,frame,cur_keyframe,T_s):
 	Returns:
 		r: Residual error as a list
 	'''
-	T = np.reshape(T_s,(3,4))
+	T = np.ones((3,4))#np.reshape(T_s,(3,4))
 	r = []
 	for i in u:
 		r.append(huber_norm(calc_photo_residual(i,frame,cur_keyframe,T)/calc_photo_residual_uncertainty(i,frame,cur_keyframe,T)))
@@ -344,11 +345,11 @@ def get_jacobian(dof,u,frame,cur_keyframe,T):
 	Returns:
 		J: The required Jacobian
 	'''
-	T_s = get_min_rep(T)
+	T_s = np.array([1,2,3,4,5,6]) #get_min_rep(T)
 	T_c = tf.constant(T_s) #Flattened pose in tf
-	r_s = calc_cost_jacobian(u,frame,keyframe,T_c)
+	r_s = tf.constant(calc_cost_jacobian(u,frame, cur_keyframe,T_c))
 	with tf.Session() as sess:
-		_,J = tf.run(tf.test.compute_gradient(r_s,(dof,1),T_c,(12,1))) #Returns two jacobians... (Other two parameters are the shapes)
+		_,J = 1,np.random.random((dof,6))#sess.run(tf.test.compute_gradient(r_s,(dof,1),T_c,(12,1))) #Returns two jacobians... (Other two parameters are the shapes)
 	return J
 
 def get_W(dof,stack_r):
@@ -362,8 +363,8 @@ def get_W(dof,stack_r):
 	Returns:
 		W: Weight Matrix
 	'''
-	W = np.zeros((dof,dof))
-	for i in range(dof):
+	W = np.random.random((dof,dof)) #Change later
+	for i in range(dof): 
 		W[i][i] = (dof + 1)/(dof + stack_r[i]**2)
 	return W
 
@@ -377,6 +378,7 @@ def exit_crit(delT):
 	Returns:
 		1(to exit) or 0(not to exit)
 	'''
+	return 1 #Change later
 
 def minimize_cost_func(u,frame, cur_keyframe):
 	'''
@@ -394,15 +396,20 @@ def minimize_cost_func(u,frame, cur_keyframe):
 	T = np.ones((3,4)) #Do random initialization later
 	while(1):
 		stack_r = calc_cost(u,frame,cur_keyframe,T)
-		J = get_jacobian(dof,u,frame,cur_keyframe,T)
-		Jt = J.transpose()
+		J = get_jacobian(dof,u,frame,cur_keyframe,T) #dofx6
+		Jt = J.transpose() #6xdof
 		W = get_W(dof,stack_r) #dof x dof - diagonal matrix
 		hess = np.linalg.inv(np.matmul(np.matmul(Jt,W),J)) # 12x12
 		delT = np.matmul(hess,Jt)
 		delT = np.matmul(delT,W)
-		delT = -np.matmul(delT,stack_r) 
-		T = np.dot(delT,T.flatten()) #Or do subtraction?
-		T = np.reshape(T,(3,4))
+		T_s = np.ones((6)) #Change later
+		delT = -np.matmul(delT,stack_r)
+		#T = np.matmul(delT.transpose(),T_s) #Or do subtraction?
+		
+		for i in range(0,6):
+			T_s[i] = T_s[i]*delT[i]
+		#T = np.reshape(T_s,(3,4))
+		T = np.ones((3,4))
 		if exit_crit(delT):
 			break
 	return T
