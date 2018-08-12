@@ -234,20 +234,22 @@ def delr_delD(u,frame,cur_keyframe,T):
 		delr: The derivative
 	'''
 	u = u.astype(int)
+
+	#Depth map value at u
 	D = tf.constant(cur_keyframe.D[u[0]][u[1]])
 	
 	delr = 0
 
+	#Use D to calculate u_prop
 	u = np.append(u,np.ones(1))
 	u = u.astype(int)
 	Vp = D*np.matmul(cam_matrix_inv,u)
 	Vp = tf.reshape(tf.concat([Vp,tf.constant(np.array([1],np.float64))],0),[4,1]) # 4x1
 	T_t = tf.constant(T) # 3x4
-	
 	u_prop = tf.matmul(T_t,Vp)[:3] #3x1
 	u_prop = tf.matmul(tf.constant(cam_matrix),u_prop)
 	u_prop = (u_prop/u_prop[2])[:2]
-	u_prop = tf.cast(u_prop,tf.int32)
+	u_prop = tf.cast(u_prop,tf.int32) 
 
 	u_ten = tf.constant(u[:2]) #u as a tensor for indexing
 	#r = cur_keyframe.I[u[0]][u[1]] - frame[u_prop[0]][u_prop[1]]

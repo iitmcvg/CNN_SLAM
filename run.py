@@ -63,10 +63,10 @@ def main():
 	# INIT camera matrix
 	cam_matrix = get_camera_matrix()
 
-    try: 
-	    cam_matrix_inv = np.linalg.inv(cam_matrix)
-    except:
-        raise (Error, "Verify camera matrix")
+	try: 
+		cam_matrix_inv = np.linalg.inv(cam_matrix)
+	except:
+		raise (Error, "Verify camera matrix")
 
 	# Image is 3 channel, frame is greyscale
 	ret,image,frame = get_camera_image()
@@ -122,5 +122,5 @@ def main():
 				cur_keyframe = K[cur_index]
 				_delay()
 
-if__name__ == "__main__":
+if __name__ == "__main__":
 	main()
