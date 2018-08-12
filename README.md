@@ -2,7 +2,7 @@
 
 *Computer Vision and Intelligence Group, IIT Madras*
 
-<img src=/avatar.png width=300 height=300></img>
+<img src=/avatar.png width=500 height=300></img>
 ---
 Blog:  [iitmcvg.github.io](http://iitmcvg.github.io/)
 

@@ -117,6 +117,14 @@ To test or train using these variants, you need to use the flag `--encoder resne
 You can download our results (unscaled disparities at 512x256) on both KITTI splits (**kitti** and **eigen**) [here](http://visual.cs.ucl.ac.uk/pubs/monoDepth/results/).  
 The naming convention is the same as with the models.
 
+## Obstacle map using Optical Flow and Monodepth
+### We have made a very crude obstacle map with the help of including the optical flow vectors and CNN depth estimation together. In order to run this :
+
+```
+python optical_depth.py --video_path <video_path> --checkpoint_path ~/monodepth_2/model_kitti
+
+```
+
 ## Reference
 If you find our work useful in your research please consider citing our paper:
 ```
@@ -138,3 +146,4 @@ Copyright © UCL Business plc 2017. Patent Pending.
 All rights reserved.
 
 This Software is licensed under the terms of the UCLB ACP-A Licence which allows for non-commercial use only, the full terms of which are made available in the [LICENSE](LICENSE) file. For any other use of the software not covered by the terms of this licence, please contact info@uclb.com
+
