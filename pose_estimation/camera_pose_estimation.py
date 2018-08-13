@@ -38,6 +38,7 @@ def isRotationMatrix(R) :
 	Checks if a matrix is a valid rotation matrix.
 	'''
 	Rt = np.transpose(R)
+	#print R,'\n\n\n'
 	shouldBeIdentity = np.dot(Rt, R)
 	I = np.identity(3, dtype = R.dtype)
 	n = np.linalg.norm(I - shouldBeIdentity)
@@ -87,26 +88,32 @@ def get_min_rep(T):
 	return T_vect
 
 def eulerAnglesToRotationMatrix(theta) :
-     
-    R_x = np.array([[1,         0,                  0                   ],
+	'''
+	Converts rotation angles about x,y and z axis to a rotation matrix
+	'''
+	R_x = np.array([[1,         0,                  0                   ],
                     [0,         math.cos(theta[0]), -math.sin(theta[0]) ],
                     [0,         math.sin(theta[0]), math.cos(theta[0])  ]
                     ])
          
-    R_y = np.array([[math.cos(theta[1]),    0,      math.sin(theta[1])  ],
+	R_y = np.array([[math.cos(theta[1]),    0,      math.sin(theta[1])  ],
                     [0,                     1,      0                   ],
                     [-math.sin(theta[1]),   0,      math.cos(theta[1])  ]
                     ])
                  
-    R_z = np.array([[math.cos(theta[2]),    -math.sin(theta[2]),    0],
+	R_z = np.array([[math.cos(theta[2]),    -math.sin(theta[2]),    0],
                     [math.sin(theta[2]),    math.cos(theta[2]),     0],
                     [0,                     0,                      1]
                     ])                     
-    R = np.dot(R_z, np.dot( R_y, R_x ))
+	R = np.dot(R_z, np.dot( R_y, R_x ))
  
-    return R
+	return R
 
 def get_back_T(T_fl):
+	'''
+	Converts the minimal representation of the pose into the normal 3x4 transformation matrix
+	'''
+	#print "The flattened pose input is ",T_fl,'\n\n\n'
 	T = np.ones((3,4))
 	T[:,3] = T_fl[:3]
 	R = eulerAnglesToRotationMatrix(T_fl[3:6])
@@ -355,7 +362,7 @@ def calc_cost_jacobian(u,frame,cur_keyframe,T_s):
 	Returns:
 		r: Residual error as a list
 	'''
-	T = np.ones((3,4))#np.reshape(T_s,(3,4))
+	T = get_back_T(T_s)
 	r = []
 	for i in u:
 		r.append(huber_norm(calc_photo_residual(i,frame,cur_keyframe,T)/calc_photo_residual_uncertainty(i,frame,cur_keyframe,T)))
@@ -377,7 +384,7 @@ def get_jacobian(dof,u,frame,cur_keyframe,T):
 	'''
 	T_s = get_min_rep(T)
 	T_c = tf.constant(T_s) #Flattened pose in tf
-	r_s = tf.constant(calc_cost_jacobian(u,frame, cur_keyframe,T_c))
+	r_s = tf.constant(calc_cost_jacobian(u,frame, cur_keyframe,T_s))
 	with tf.Session() as sess:
 		_,J = 1,np.random.random((dof,6))#sess.run(tf.test.compute_gradient(r_s,(dof,1),T_c,(12,1))) #Returns two jacobians... (Other two parameters are the shapes)
 	return J
@@ -423,7 +430,8 @@ def minimize_cost_func(u,frame, cur_keyframe):
 		T: The camera Pose
 	'''
 	dof = len(u)
-	T = np.ones((3,4)) #Do random initialization later
+	T_s = np.random.random((6))
+	T = get_back_T(T_s) #So that the rotation matrix is valid
 	while(1):
 		stack_r = calc_cost(u,frame,cur_keyframe,T)
 		J = get_jacobian(dof,u,frame,cur_keyframe,T) #dofx6
@@ -432,16 +440,14 @@ def minimize_cost_func(u,frame, cur_keyframe):
 		hess = np.linalg.inv(np.matmul(np.matmul(Jt,W),J)) # 12x12
 		delT = np.matmul(hess,Jt)
 		delT = np.matmul(delT,W)
-		T_s = np.ones((6)) #Change later
+		T_s = get_min_rep(T)
 		delT = -np.matmul(delT,stack_r)
 		#T = np.matmul(delT.transpose(),T_s) #Or do subtraction?
 		
 		for i in range(0,6):
 			T_s[i] = T_s[i]*delT[i]
 
-
-		####	
-		T = np.reshape(T_s,(3,4))
+		T = get_back_T(T_s)
 		T = np.ones((3,4))
 		if exit_crit(delT):
 			break
@@ -457,21 +463,17 @@ def check_keyframe(T):
 	Returns:
 		Either 1(is a keyframe) or 0(not a keyframe)
 	'''
-	W = np.zeros((12,12)) #Weight Matrix
+	W = np.ones((6,6)) #Weight Matrix - change later
 	threshold = 0
-	R = T[:3][:3]
-	t = T[3][:3]
-	R = R.flatten()
-	E = np.concatenate(R,t) # 12 dimensional 	
-	temp = matmul(W,E)
-	temp = matmul(E.transpose(),temp)
+	T_s = get_min_rep(T)	
+	temp = matmul(W,T_s) # 6x1
+	temp = matmul(T_s.transpose(),temp)
 	return temp>=threshold
 
 def _delay():
 	'''
 	Adds a time delay
 	'''
-
 	time.sleep(60) #Change later
 
 def _exit_program():
@@ -528,4 +530,4 @@ def test_get_back_T():
 	print("Testing get_back_T",get_back_T(T_s))
 
 if __name__=='__main__':
-	test_get_back_T()
+	test_min_cost_func()
