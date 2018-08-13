@@ -14,6 +14,7 @@ import tensorflow as tf
 import sys
 import time
 import argparse
+import math
 
 # Modules
 import depth_map_fusion as depth_map_fusion
@@ -32,58 +33,85 @@ class Keyframe:
 		self.U = uncertainty
 		self.I = image
 
-	def _isRotationMatrix(self,R) :
-		'''
-		Checks if a matrix is a valid rotation matrix.
-		'''
-		Rt = np.transpose(R)
-		shouldBeIdentity = np.dot(Rt, R)
-		I = np.identity(3, dtype = R.dtype)
-		n = np.linalg.norm(I - shouldBeIdentity)
-		return n < 1e-6
+def isRotationMatrix(R) :
+	'''
+	Checks if a matrix is a valid rotation matrix.
+	'''
+	Rt = np.transpose(R)
+	shouldBeIdentity = np.dot(Rt, R)
+	I = np.identity(3, dtype = R.dtype)
+	n = np.linalg.norm(I - shouldBeIdentity)
+	return n < 1e-6
 	
 
-	def _extract_angles(self):
-		'''
-		Extract rotation angles
+def extract_angles(R):
+	'''
+	Extract rotation angles
 
-		Returns: aplha, beta, gamma (as np array)
-		'''
+	Returns: aplha, beta, gamma (as np array)
+	'''
 
-		assert(self._isRotationMatrix(R))
+	assert(isRotationMatrix(R)) #Throws error if false
      
-		sy = math.sqrt(R[0,0] * R[0,0] +  R[1,0] * R[1,0])
+	sy = math.sqrt(R[0,0] * R[0,0] +  R[1,0] * R[1,0])
 		
-		singular = sy < 1e-6
+	singular = sy < 1e-6
 	
-		if  not singular :
-			x = math.atan2(R[2,1] , R[2,2])
-			y = math.atan2(-R[2,0], sy)
-			z = math.atan2(R[1,0], R[0,0])
-		else :
-			x = math.atan2(-R[1,2], R[1,1])
-			y = math.atan2(-R[2,0], sy)
-			z = 0
+	if  not singular :
+		x = math.atan2(R[2,1] , R[2,2])
+		y = math.atan2(-R[2,0], sy)
+		z = math.atan2(R[1,0], R[0,0])
+	else :
+		x = math.atan2(-R[1,2], R[1,1])
+		y = math.atan2(-R[2,0], sy)
+		z = 0
 	
-		return np.array([x, y, z])
+	return np.array([x, y, z])
 
-	@property
-	def T_vec(self):
-		'''
-		Convert 4*4 matrix into 6*1 vector
 
-		[x y z alpha beta gamma]
+def get_min_rep(T):
+	'''
+	Convert 3*4 matrix into 6*1 vector
+
+	[x y z alpha beta gamma]
 	
-		'''
+	'''
+	t=T[:,3]
+	x,y,z=t
 
-		t=self.T[:3,3].T
-		x,y,z=t
+	angles=extract_angles(T[:,:3])
 
-		angles=self._extract_angles()
+	T_vect=np.zeros(6)
+	T_vect[:3]=t
+	T_vect[3:6]=angles
+	return T_vect
 
-		self.T_vect=np.zeros(6)
-		self.T_vect[:3]=t
-		self.T_vect[:3]=angles
+def eulerAnglesToRotationMatrix(theta) :
+     
+    R_x = np.array([[1,         0,                  0                   ],
+                    [0,         math.cos(theta[0]), -math.sin(theta[0]) ],
+                    [0,         math.sin(theta[0]), math.cos(theta[0])  ]
+                    ])
+         
+    R_y = np.array([[math.cos(theta[1]),    0,      math.sin(theta[1])  ],
+                    [0,                     1,      0                   ],
+                    [-math.sin(theta[1]),   0,      math.cos(theta[1])  ]
+                    ])
+                 
+    R_z = np.array([[math.cos(theta[2]),    -math.sin(theta[2]),    0],
+                    [math.sin(theta[2]),    math.cos(theta[2]),     0],
+                    [0,                     0,                      1]
+                    ])                     
+    R = np.dot(R_z, np.dot( R_y, R_x ))
+ 
+    return R
+
+def get_back_T(T_fl):
+	T = np.ones((3,4))
+	T[:,3] = T_fl[:3]
+	R = eulerAnglesToRotationMatrix(T_fl[3:6])
+	T[:,:3] = R
+	return T
 
 def find_uncertainty(u,D,D_prev,T):
 	'''
@@ -347,7 +375,7 @@ def get_jacobian(dof,u,frame,cur_keyframe,T):
 	Returns:
 		J: The required Jacobian
 	'''
-	T_s = np.array([1,2,3,4,5,6]) #get_min_rep(T)
+	T_s = get_min_rep(T)
 	T_c = tf.constant(T_s) #Flattened pose in tf
 	r_s = tf.constant(calc_cost_jacobian(u,frame, cur_keyframe,T_c))
 	with tf.Session() as sess:
@@ -410,7 +438,10 @@ def minimize_cost_func(u,frame, cur_keyframe):
 		
 		for i in range(0,6):
 			T_s[i] = T_s[i]*delT[i]
-		#T = np.reshape(T_s,(3,4))
+
+
+		####	
+		T = np.reshape(T_s,(3,4))
 		T = np.ones((3,4))
 		if exit_crit(delT):
 			break
@@ -484,5 +515,17 @@ def test_min_cost_func():
 	print("Testing minimize cost func",minimize_cost_func(u_test,frame_test,cur_key))
 
 
+def test_get_min_rep():
+	T = np.array([[0.36,0.48,-0.8,5],[-0.8,0.6,0,3],[0.48,0.64,0.60,8]])
+	#T = np.array([[1,0,0,5],[0,math.sqrt(3)/2,0.5,3],[0,-0.5,math.sqrt(3)/2,8]]) # 30 degree rotation about x axis - works
+	print T,'\n'
+	print ("Testing get_min_rep",get_min_rep(T))
+	return get_min_rep(T)
+
+def test_get_back_T():
+	T_s = test_get_min_rep()
+	print T_s,'\n'
+	print("Testing get_back_T",get_back_T(T_s))
+
 if __name__=='__main__':
-	test_min_cost_func()
+	test_get_back_T()
