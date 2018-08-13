@@ -1,4 +1,4 @@
-#Check for loss of precision while converting u to int
+#Check interpolation for derivative
 # do compute_gradient all
 #Change get min_rep and getting back (2 cases of getting min rep and getting back normal rep)
 #Check for right and left derivative
@@ -21,7 +21,7 @@ import depth_map_fusion as depth_map_fusion
 #import monodepth
 
 im_size = (480,640)
-sigma_p = 0 # Some white noise variance thing
+sigma_p = 5 # Some white noise variance thing
 index_matrix = np.dstack(np.meshgrid(np.arange(480),np.arange(640),indexing = 'ij'))
 cam_matrix = np.eye(3,3) #Change later
 cam_matrix_inv = np.eye(3,3) #Change later
@@ -255,9 +255,13 @@ def calc_photo_residual_d(u,D,T,frame,cur_keyframe): #For finding the derivative
 	r = cur_keyframe.I[u[0]][u[1]] - frame[u_prop[0]][u_prop[1]]
 	return r 
 
+def get_delD(D):
+	return 0.01 #Change later to calculate based on input depth map
+
+
 def delr_delD(u,frame,cur_keyframe,T):
 	'''
-	Finds the derivative of the photometric residual wrt depth
+	Finds the derivative of the photometric residual wrt depth (r wrt d)
 
 	Arguments:
 		u: High gradient pixel location
@@ -283,20 +287,27 @@ def delr_delD(u,frame,cur_keyframe,T):
 	T_t = tf.constant(T) # 3x4
 	u_prop = tf.matmul(T_t,Vp)[:3] #3x1
 	u_prop = tf.matmul(tf.constant(cam_matrix),u_prop)
-	u_prop = (u_prop/u_prop[2])[:2]
-	u_prop = tf.cast(u_prop,tf.int32) 
+	u_prop = (u_prop/u_prop[2])[:2] #Propagated pixel location
 
 	u_ten = tf.constant(u[:2]) #u as a tensor for indexing
-	#r = cur_keyframe.I[u[0]][u[1]] - frame[u_prop[0]][u_prop[1]]
+	#r = cur_keyframe.I[u[0]][u[1]] - frame[u_prop[0]][u_prop[1]] #What r is normally
 	with tf.Session() as sess:
-		#u_arr = sess.run(u_prop)
 		u_arr = [u_prop[0][0],u_prop[1][0]]
-		#r = tf.cast(tf.constant(cur_keyframe.I[u[0]][u[1]] - frame[u_arr[0][0]][u_arr[1][0]]),tf.float32)
-		r = tf.cast(tf.gather_nd(tf.constant(cur_keyframe.I),u_ten),tf.float32) - tf.cast(tf.gather_nd(tf.constant(frame),u_arr),tf.float32)
-		#print "\n\n",'gay',r,D,"\n\n\n\n"
-		#r = tf.constant(float(calc_photo_residual_d(u,D,T,frame,cur_keyframe)))
+		#r = tf.cast(tf.gather_nd(tf.constant(cur_keyframe.I),u_ten),tf.float32) - tf.cast(tf.gather_nd(tf.constant(frame),u_arr),tf.float32)
+
 		#_,delr = tf.test.compute_gradient(D,(),r,(),np.array(cur_keyframe.D[u[0]][u[1]]),0.001,None,None)
-	return 0.001
+
+		#Take a step
+		delu_propd = tf.constant([sess.run(tf.gradients(u_prop[0],D)),sess.run(tf.gradients(u_prop[1],D))])
+		delD = get_delD(sess.run(D))
+		print delu_propd
+		delu_prop = sess.run(delu_propd*delD)
+		u_prop = sess.run(tf.cast(u_prop,tf.int32))
+		u_prop_new = (u_prop + delu_prop).astype(int)
+		r_old = cur_keyframe.I[u[0],u[1]] - frame[u_prop[0],u_prop[1]]
+		r_new = cur_keyframe.I[u[0],u[1]] - frame[u_prop_new[0],u_prop_new[1]]
+		delr = (r_new - r_old)/delD
+	return delr
 
 def calc_photo_residual_uncertainty(u,frame,cur_keyframe,T):
 	'''
@@ -313,6 +324,8 @@ def calc_photo_residual_uncertainty(u,frame,cur_keyframe,T):
 	'''
 	deriv = delr_delD(u,frame,cur_keyframe,T)
 	sigma = (sigma_p**2 + (deriv**2)*cur_keyframe.U[u[0]][u[1]])**0.5
+	print "deriv = ",deriv
+	print "sigma = ",sigma,'\n\n'
 	return sigma
 
 def huber_norm(x):
@@ -324,7 +337,7 @@ def huber_norm(x):
 
 	Returns:
 		Huber norm of x
-	'''	
+	'''
 	delta = 1 #Change later
 	if abs(x)<delta:
 		return 0.5*(x**2)
@@ -363,11 +376,15 @@ def calc_cost_jacobian(u,frame,cur_keyframe,T_s):
 		r: Residual error as a list
 	'''
 	T = get_back_T(T_s)
-	r = []
+	r = np.zeros(len(u))
+	j = 0 #Count variable
 	for i in u:
-		r.append(huber_norm(calc_photo_residual(i,frame,cur_keyframe,T)/calc_photo_residual_uncertainty(i,frame,cur_keyframe,T)))
+		r[j] = huber_norm(calc_photo_residual(i,frame,cur_keyframe,T)/calc_photo_residual_uncertainty(i,frame,cur_keyframe,T))
+		j = j+1
 	return r
 
+def test(T):
+	return T*2
 def get_jacobian(dof,u,frame,cur_keyframe,T):
 	'''
 	Returns the Jacobian of the Residual Error wrt the Pose
@@ -384,10 +401,13 @@ def get_jacobian(dof,u,frame,cur_keyframe,T):
 	'''
 	T_s = get_min_rep(T)
 	T_c = tf.constant(T_s) #Flattened pose in tf
-	r_s = tf.constant(calc_cost_jacobian(u,frame, cur_keyframe,T_s))
+	#r_s = tf.constant(calc_cost_jacobian(u,frame, cur_keyframe,T_s))
+	r_s = test(T_c)
 	with tf.Session() as sess:
-		_,J = 1,np.random.random((dof,6))#sess.run(tf.test.compute_gradient(r_s,(dof,1),T_c,(12,1))) #Returns two jacobians... (Other two parameters are the shapes)
-	return J
+		print "r_s = ",sess.run(r_s)
+		print "T_c = ",sess.run(T_c)
+		_,J = tf.test.compute_gradient(T_c,(6),r_s,(dof),tf.constant(T_s)) #Returns two jacobians... (Other parameters are the shapes and the initial values)
+		return J
 
 def get_W(dof,stack_r):
 	'''
@@ -407,7 +427,7 @@ def get_W(dof,stack_r):
 
 def exit_crit(delT):
 	'''
-	Checks for the when to exit the loop while doing Gauss - Newton Optimization
+	Checks for when to exit the loop while doing Gauss - Newton Optimization
 	
 	Arguments: 
 		delT: The right multiplied increment of the pose
