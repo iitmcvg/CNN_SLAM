@@ -21,6 +21,19 @@ import math
 import depth_map_fusion as depth_map_fusion
 #import monodepth
 
+'''
+Variable nomenclature:
+
+* u : high grad elements
+* uu: array of high elements
+* T: pose (3*4)
+* T_s: pose compressed (6x1)
+* D: depth map
+* U: uncertainity
+* dof: len(uu)
+
+'''
+
 im_size = (480,640)
 sigma_p = 5 # Some white noise variance thing
 index_matrix = np.dstack(np.meshgrid(np.arange(480),np.arange(640),indexing = 'ij'))
@@ -110,7 +123,7 @@ def eulerAnglesToRotationMatrix(theta) :
  
 	return R
 
-def get_back_T(T_fl):
+def _get_back_T(T_fl):
 	'''
 	Converts the minimal representation of the pose into the normal 3x4 transformation matrix
 	'''
@@ -183,13 +196,15 @@ def get_highgrad_element(img,threshold=100):
 		img: Input image
 
 	Returns:
-		u: List of pixel locations
+		u: Array of pixel locations
+		Shape (X,2)
+		X: number of high grad elements
 	'''
 	
 	laplacian = cv2.Laplacian(img,cv2.CV_8U)
 	ret,thresh = cv2.threshold(laplacian,threshold,255,cv2.THRESH_BINARY)
 	u = cv2.findNonZero(thresh)
-	return np.array(u)
+	return np.squeeze(np.array(u))
 
 def calc_photo_residual(i,frame,cur_keyframe,T):
 	'''
@@ -301,7 +316,7 @@ def delr_delD(u,frame,cur_keyframe,T):
 		#Take a step
 		delu_propd = tf.constant([sess.run(tf.gradients(u_prop[0],D)),sess.run(tf.gradients(u_prop[1],D))])
 		delD = get_delD(sess.run(D))
-		print delu_propd
+		print (delu_propd)
 		delu_prop = sess.run(delu_propd*delD)
 		u_prop = sess.run(tf.cast(u_prop,tf.int32))
 		u_prop_new = (u_prop + delu_prop).astype(int)
@@ -325,8 +340,8 @@ def calc_photo_residual_uncertainty(u,frame,cur_keyframe,T):
 	'''
 	deriv = delr_delD(u,frame,cur_keyframe,T)
 	sigma = (sigma_p**2 + (deriv**2)*cur_keyframe.U[u[0]][u[1]])**0.5
-	print "deriv = ",deriv
-	print "sigma = ",sigma,'\n\n'
+	print ("deriv = ",deriv)
+	print ("sigma = ",sigma,'\n\n')
 	return sigma
 
 def huber_norm(x):
@@ -345,23 +360,21 @@ def huber_norm(x):
 	else:
 		return delta*(abs(x) - (delta/2))
 
-def calc_cost(u,frame,cur_keyframe,T):
+def calc_cost(uu,frame,cur_keyframe,T):
 	'''
 	Calculates the residual error.
 
 	Arguments:
-		u: A list containing the high gradient elements
+		uu: An array containing the high gradient elements (X,2)
 		frame: Numpy array o the current frame
 		cur_keyframe: Previous keyframe as a Keyframe class
-		T: Current estimated Pose
+		pose: Current estimated Pose
 
 	Returns:
 		r: Residual error as a list
 	'''
-	r = []
-	for i in u:
-		r.append(huber_norm(calc_photo_residual(i,frame,cur_keyframe,T)/calc_photo_residual_uncertainty(i,frame,cur_keyframe,T))) #Is it uncertainty or something else?
-	return r
+
+	return [huber_norm(calc_photo_residual(i,frame,cur_keyframe,T)/calc_photo_residual_uncertainty(i,frame,cur_keyframe,T)) for u in uu]
 
 def calc_cost_jacobian(u,frame,cur_keyframe,T_s): 
 	'''
@@ -376,7 +389,7 @@ def calc_cost_jacobian(u,frame,cur_keyframe,T_s):
 	Returns:
 		r: Residual error as a list
 	'''
-	T = get_back_T(T_s)
+	T = _get_back_T(T_s)
 	r = np.zeros(len(u))
 	j = 0 #Count variable
 	for i in u:
@@ -406,12 +419,12 @@ def get_jacobian(dof,u,frame,cur_keyframe,T):
 	r_s = tf.constant(calc_cost_jacobian(u,frame, cur_keyframe,T_s))
 	#r_s = test(T_c)
 	with tf.Session() as sess:
-		print "r_s = ",sess.run(r_s)
-		print "T_c = ",sess.run(T_c)
+		print ("r_s = ",sess.run(r_s))
+		print ("T_c = ",sess.run(T_c))
 
 		#Following works with custom test function
 		J1,J2 = tf.test.compute_gradient(T_c,(6,),r_s,(dof,),T_s) #Returns two jacobians... (Other parameters are the shapes and the initial values)
-		print '\n\n\n',J1,'\n\n\n'
+		print ('\n\n\n',J1,'\n\n\n')
 		return J1.transpose() #6xdof #Returning jacobian transpose????
 
 def get_W(dof,stack_r):
@@ -440,7 +453,9 @@ def exit_crit(delT):
 	Returns:
 		1(to exit) or 0(not to exit)
 	'''
-	return 1 #Change later
+	#Change later
+	# TO DO
+	return 1 
 
 def minimize_cost_func(u,frame, cur_keyframe):
 	'''
@@ -455,15 +470,20 @@ def minimize_cost_func(u,frame, cur_keyframe):
 		T: The camera Pose
 	'''
 	dof = len(u)
+
+	# Random pose
 	T_s = np.random.random((6))
-	T = get_back_T(T_s) #So that the rotation matrix is valid
-	while(1):
+	# So that the rotation matrix is valid
+	T = _get_back_T(T_s)
+
+	while True:
 		stack_r = calc_cost(u,frame,cur_keyframe,T)
+		
 		J = get_jacobian(dof,u,frame,cur_keyframe,T) #dofx6
 		Jt = J.transpose() #6xdof
 		W = get_W(dof,stack_r) #dof x dof - diagonal matrix
 		temp = np.matmul(np.matmul(Jt,W),J)
-		print "temp = ",temp
+		print ("temp = ",temp)
 		hess = np.linalg.inv(hess) # 12x12
 		delT = np.matmul(hess,Jt)
 		delT = np.matmul(delT,W)
@@ -474,7 +494,7 @@ def minimize_cost_func(u,frame, cur_keyframe):
 		for i in range(0,6):
 			T_s[i] = T_s[i]*delT[i]
 
-		T = get_back_T(T_s)
+		T = _get_back_T(T_s)
 		T = np.ones((3,4))
 		if exit_crit(delT):
 			break
@@ -510,31 +530,39 @@ def _exit_program():
 	sys.exit(0)
 
 def test_highgrad():
+	'''
+	Test thresholding based extraction of high gradient element.
+
+	Laplace filter used
+	'''
 	im_x,im_y=im_size
 	dummy_image=np.uint8(np.random.random((im_x,im_y,3))*256)
+	dummy_image_grey=np.uint8((dummy_image[:,:,0]+dummy_image[:,:,1]+dummy_image[:,:,2])/3)
 
-	dummy_image_grey=(dummy_image[:,:,0]+dummy_image[:,:,1]+dummy_image[:,:,2])/3
-	dummy_image_grey=np.uint8(dummy_image_grey)
-
-	dummy_depth=np.random.random((im_x,im_y))
-
-	dummy_pose=np.eye(4)[:3]
-	dummy_uncertainity=np.ones((im_x,im_y))
-
-	# Dummy keyframe
-	dummy_frame= Keyframe(dummy_pose,dummy_depth, dummy_uncertainity, dummy_image_grey)
-	
 	# Test high  grad
-	print("Testing high grad",get_highgrad_element(dummy_image_grey))
+	result=get_highgrad_element(dummy_image_grey,threshold=200)
+	print("Testing high grad {} ".format(result))
+
+	assert(result.shape[1]==2)
 
 def test_min_cost_func():
-	im_x,im_y = im_size
-	u_test = np.array([[5,4],[34,56],[231,67],[100,100],[340,237]])
-	frame_test = np.uint8(np.random.random((im_x,im_y))*256)
-	cur_key_test_im = np.uint8(np.random.random((im_x,im_y,3))*256)
-	cur_key_test_im_grey = (cur_key_test_im[:,:,0]+cur_key_test_im[:,:,1]+cur_key_test_im[:,:,2])/3
-	cur_key_test_im_grey = np.uint8(cur_key_test_im_grey)
+	'''
+	Test minimum cost function:
 
+	* Take current frame, keyframe
+	'''
+	# Image Size
+	im_x,im_y = im_size
+
+	# Random high grad points
+	u_test = np.array([[5,4],[34,56],[231,67],[100,100],[340,237]])
+
+	# Random frame
+	frame_test = np.uint8(np.random.random((im_x,im_y))*256)
+
+	# Current key frame, depth, pose, uncertainuty
+	cur_key_test_im = np.uint8(np.random.random((im_x,im_y,3))*256)
+	cur_key_test_im_grey = np.uint8((cur_key_test_im[:,:,0]+cur_key_test_im[:,:,1]+cur_key_test_im[:,:,2])/3)
 	cur_key_depth = np.random.random((im_x,im_y))
 	dummy_pose=np.eye(4)[:3]
 	cur_key_unc = np.ones((im_x,im_y))
@@ -543,18 +571,18 @@ def test_min_cost_func():
 
 	print("Testing minimize cost func",minimize_cost_func(u_test,frame_test,cur_key))
 
-
 def test_get_min_rep():
 	T = np.array([[0.36,0.48,-0.8,5],[-0.8,0.6,0,3],[0.48,0.64,0.60,8]])
 	#T = np.array([[1,0,0,5],[0,math.sqrt(3)/2,0.5,3],[0,-0.5,math.sqrt(3)/2,8]]) # 30 degree rotation about x axis - works
-	print T,'\n'
+	print (T,'\n')
 	print ("Testing get_min_rep",get_min_rep(T))
 	return get_min_rep(T)
 
 def test_get_back_T():
 	T_s = test_get_min_rep()
-	print T_s,'\n'
-	print("Testing get_back_T",get_back_T(T_s))
+	print (T_s,'\n')
+	print("Testing get_back_T",_get_back_T(T_s))
 
 if __name__=='__main__':
+	test_highgrad()
 	test_min_cost_func()
