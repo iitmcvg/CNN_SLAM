@@ -2,6 +2,7 @@
 # do compute_gradient all
 #Change get min_rep and getting back (2 cases of getting min rep and getting back normal rep)
 #Check for right and left derivative
+#Check which jacobian we are returning from compute_gradient and if its returning jacobian transpose??
 #Change exit criteria
 '''
 Camera Pose Estimation
@@ -384,7 +385,8 @@ def calc_cost_jacobian(u,frame,cur_keyframe,T_s):
 	return r
 
 def test(T):
-	return T*2
+	return (T**2)[:5]
+
 def get_jacobian(dof,u,frame,cur_keyframe,T):
 	'''
 	Returns the Jacobian of the Residual Error wrt the Pose
@@ -401,13 +403,16 @@ def get_jacobian(dof,u,frame,cur_keyframe,T):
 	'''
 	T_s = get_min_rep(T)
 	T_c = tf.constant(T_s) #Flattened pose in tf
-	#r_s = tf.constant(calc_cost_jacobian(u,frame, cur_keyframe,T_s))
-	r_s = test(T_c)
+	r_s = tf.constant(calc_cost_jacobian(u,frame, cur_keyframe,T_s))
+	#r_s = test(T_c)
 	with tf.Session() as sess:
 		print "r_s = ",sess.run(r_s)
 		print "T_c = ",sess.run(T_c)
-		_,J = tf.test.compute_gradient(T_c,(6),r_s,(dof),tf.constant(T_s)) #Returns two jacobians... (Other parameters are the shapes and the initial values)
-		return J
+
+		#Following works with custom test function
+		J1,J2 = tf.test.compute_gradient(T_c,(6,),r_s,(dof,),T_s) #Returns two jacobians... (Other parameters are the shapes and the initial values)
+		print '\n\n\n',J1,'\n\n\n'
+		return J1.transpose() #6xdof #Returning jacobian transpose????
 
 def get_W(dof,stack_r):
 	'''
@@ -420,7 +425,7 @@ def get_W(dof,stack_r):
 	Returns:
 		W: Weight Matrix
 	'''
-	W = np.random.random((dof,dof)) #Change later
+	W = np.random.random((dof,dof))
 	for i in range(dof): 
 		W[i][i] = (dof + 1)/(dof + stack_r[i]**2)
 	return W
@@ -457,7 +462,9 @@ def minimize_cost_func(u,frame, cur_keyframe):
 		J = get_jacobian(dof,u,frame,cur_keyframe,T) #dofx6
 		Jt = J.transpose() #6xdof
 		W = get_W(dof,stack_r) #dof x dof - diagonal matrix
-		hess = np.linalg.inv(np.matmul(np.matmul(Jt,W),J)) # 12x12
+		temp = np.matmul(np.matmul(Jt,W),J)
+		print "temp = ",temp
+		hess = np.linalg.inv(hess) # 12x12
 		delT = np.matmul(hess,Jt)
 		delT = np.matmul(delT,W)
 		T_s = get_min_rep(T)
