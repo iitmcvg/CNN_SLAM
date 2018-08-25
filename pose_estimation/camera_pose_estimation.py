@@ -1,8 +1,14 @@
-#Check which jacobian we are returning from compute_gradient and if its returning jacobian transpose??
-#Change exit criteria
-#Vectorize derivatives finding wherever possible
-#Make sure cost isnt calculated twice while finding jacobian
-#Make sure values are in float before finding inverse
+# Overflow warnings and other errors while running
+
+# Check later
+# Newton gauss is for least squares; Here we are using for huber norm (also should huber norm be included in the calculation of individual costs)
+# delr/delu = delr/delx + delr/dely - should we divide by 2 or something or find the root of sum of squares
+
+# To do
+# Change exit criteria
+# Make sure values are in float before finding inverse(1.0/x)
+# See if the entire keyframe needs to be passed everytime. Sometimes only the image needs to be passed
+
 '''
 Camera Pose Estimation
 '''
@@ -46,12 +52,31 @@ class Keyframe:
 		self.U = uncertainty
 		self.I = image
 
+def fix_u(u_prop):
+	'''
+	Fixes a pixel location if it is negative or out of bounds
+	
+	Arguments;
+		u_prop: pixel location
+
+	Returns:
+		u_prop: fixed pixel location
+	'''
+	if u_prop[0]>im_size[0]:
+		u_prop = im_size[0] - 1
+	elif u_prop[0]<0:
+		u_prop[0] = 0
+	if u_prop[1]>im_size[1]:
+		u_prop[1] = im_size[1] - 1
+	elif u_prop[1]<0:
+		u_prop[1] = 0
+	return u_prop
+
 def isRotationMatrix(R) :
 	'''
 	Checks if a matrix is a valid rotation matrix.
 	'''
 	Rt = np.transpose(R)
-	#print R,'\n\n\n'
 	shouldBeIdentity = np.dot(Rt, R)
 	I = np.identity(3, dtype = R.dtype)
 	n = np.linalg.norm(I - shouldBeIdentity)
@@ -170,6 +195,7 @@ def get_uncertainty(T,D,prev_keyframe):
 	Returns:
 		U: Uncertainty map
 	'''
+	# Write vectorize properly
 	T = np.matmul(np.linalg.inv(T),prev_keyframe.T) #Check if this is right
 	find_uncertainty_v = np.vectorize(find_uncertainty)
 	U = find_uncertainty_v(index_matrix,D,prev_keyframe.D,T) #Check
@@ -236,10 +262,12 @@ def calc_photo_residual(i,frame,cur_keyframe,T):
 	# Projection onto image plane
 	u_prop = (u_prop/u_prop[2])[:2] 
 	u_prop = u_prop.astype(int)
-	# Residual width*height
+
+	u_prop = fix_u(u_prop)
+
+	#print i,'\n',u_prop
 
 	r = (cur_keyframe.I[i[0]][i[1]] - frame[u_prop[0]][u_prop[1]])
-
 	return r
 
 #Not needed?
@@ -277,10 +305,39 @@ def get_delD(D):
 	return 0.01 #Change later to calculate based on input depth map
 
 
+def calc_r_for_delr(u,D,frame,cur_keyframe,T):
+	'''
+	Finds photometric residual given one point
+
+	Argumemnts:
+		u: numpy array oof x and y location
+		D: Depth map value at u
+		frame: current frame
+		cur_keyframe: previous keyframe of keyframe class
+		T: current estimated pose
+
+	Returns:
+		r: photometric residual
+	'''
+	u = np.append(u,[1])
+	v = D*np.matmul(cam_matrix_inv,u)
+	v = np.append(v,[1])
+	u_prop = np.matmul(T,v)[:3]
+	u_prop = np.matmul(cam_matrix,u_prop)
+	u_prop = ((u_prop/u_prop[2])[:2]).astype(int)
+
+	u_prop = fix_u(u_prop)
+
+	r = cur_keyframe.I[u[0],u[1]] - frame[u_prop[0],u_prop[1]]
+	return r
+
 def delr_delD(u,frame,cur_keyframe,T):
 	'''
 	Finds the derivative of the photometric residual wrt depth (r wrt d)
 	delr/delD  = (delr/delu)*(delu/delD)
+	delr/delu = delr/delx + delr/dely - finding root of sum of squares now
+	delD/delu = delD/delx + delD/dely - finding root of sum of squares now
+	r = cur_keyframe.I[u[0]][u[1]] - frame[u_prop[0]][u_prop[1]] - How r is defined normally
 
 	Arguments:
 		u: High gradient pixel location
@@ -291,52 +348,46 @@ def delr_delD(u,frame,cur_keyframe,T):
 	Returns:
 		delr: The derivative
 	'''
-	#Convert u to int
+
+	# Convert u to int
 	u = u.astype(int)
 
-	#For finding right and left sides
-	u1 = u - 1
-	u2 = u + 1
+	# For finding right and left sides for x and y
+	ulx = np.array([u[0] - 1,u[1]])
+	urx = np.array([u[0] + 1,u[1]])
+	uly = np.array([u[0],u[1] - 1])
+	ury = np.array([u[0],u[1] - 1])
 
-	#Depth map value at u-1 and u+1
-	D1 = cur_keyframe.D[u1[0]][u1[1]]
-	D2 = cur_keyframe.D[u2[0]][u2[1]]
+	# Depth map values
+	Dlx = cur_keyframe.D[ulx[0]][ulx[1]]
+	Drx = cur_keyframe.D[urx[0]][urx[1]]
+	Dly = cur_keyframe.D[uly[0]][uly[1]]
+	Dry = cur_keyframe.D[ury[0]][ury[1]]
 
-	#Use D to calculate u_prop1 and u_prop2
-	u1 = np.append(u1,np.ones(1))
-	V1 = D1*np.matmul(cam_matrix_inv,u1)
-	V1 = np.append(V1,np.ones(1))
-	u_prop1 = np.matmul(T,V1)[:3] #3x1
-	u_prop1 = np.matmul(cam_matrix,u_prop1)
-	u_prop1 = ((u_prop1/u_prop1[2])[:2]).astype(int) #Propagated pixel location
+	# Finding delD/delu
+	delDdelu = ((Drx - Dlx)**2 + (Dry - Dly)**2)**0.5
+	deludelD = 1.0/delDdelu
 
-	u2 = np.append(u2,np.ones(1))
-	V2= D2*np.matmul(cam_matrix_inv,u2)
-	V2 = np.append(V2,np.ones(1))
-	u_prop2 = np.matmul(T,V2)[:3] #3x1
-	u_prop2 = np.matmul(cam_matrix,u_prop2)
-	u_prop2 = ((u_prop2/u_prop2[2])[:2]).astype(int) #Propagated pixel location
+	r_list = [0,0,0,0] # Just random
 
+	"""
+	u = np.append(u,[1])
+	v = D*np.matmul(cam_matrix_inv,u)
+	v = np.append(v,[1])
+	u_prop = np.matmul(T,v)[:3]
+	u_prop = np.matmul(cam_matrix,u_prop)
+	u_prop = ((u_prop/u_prop[2])[:2]).astype(int)
+	r_list[0] = cur_keyframe.I[u[0],u[1]] - frame[u_prop[0],u_prop[1]]"""
 
-	#r = cur_keyframe.I[u[0]][u[1]] - frame[u_prop[0]][u_prop[1]] - How r is defined normally
+	# Calculate r_list
+	calc_r_for_delr_v = np.vectorize(calc_r_for_delr,excluded = [2,3,4],signature = '(1),()->()')
+	u_list = [ulx,urx,uly,ury]
+	D_list = [Dlx,Drx,Dly,Dry]
+	r_list = calc_r_for_delr_v(u_list,D_list,frame,cur_keyframe,T)
 
-	u1 = u1.astype(int)
-	u2 = u2.astype(int)
+	delrdelu = ((r_list[0] - r_list[1])**2 + (r_list[2] - r_list[3])**2)**0.5
 
-	r1 = cur_keyframe.I[u1[0]-1,u1[1]-1] - frame[u_prop1[0],u_prop1[1]] # Left side
-	r2 = cur_keyframe.I[u2[0]-1,u2[1]-1] - frame[u_prop2[0],u_prop2[1]] # Right side
-
-	delrdelu = (r2 - r1)/2
-
-	print "delr/delu = ",delrdelu,'\n'
-
-	delddelu = float((D2 - D1)/2)
-	deludeld = 1.0/(delddelu)
-
-	delr = delrdelu*deludeld
-
-	print "delr = ",delr,'\n\n'
-
+	delr = delrdelu*deludelD
 	return delr
 
 def calc_photo_residual_uncertainty(u,frame,cur_keyframe,T):
@@ -354,8 +405,6 @@ def calc_photo_residual_uncertainty(u,frame,cur_keyframe,T):
 	'''
 	deriv = delr_delD(u,frame,cur_keyframe,T)
 	sigma = (sigma_p**2 + (deriv**2)*cur_keyframe.U[u[0]][u[1]])**0.5
-	print ("deriv = ",deriv)
-	print ("sigma = ",sigma,'\n\n')
 	return sigma
 
 def huber_norm(x):
@@ -374,9 +423,9 @@ def huber_norm(x):
 	else:
 		return delta*(abs(x) - (delta/2))
 
-def calc_cost(uu,frame,cur_keyframe,T):
+def calc_cost(uu,frame,cur_keyframe,T,flag = 1):
 	'''
-	Calculates the residual error.
+	Calculates the residual error as a stack.
 
 	Arguments:
 		uu: An array containing the high gradient elements (X,2)
@@ -385,36 +434,14 @@ def calc_cost(uu,frame,cur_keyframe,T):
 		pose: Current estimated Pose
 
 	Returns:
-		r: Residual error as a list
+		r: Residual error as an array
 	'''
+	# Should we include huber norm also here
+	if flag==0:
+		T = _get_back_T(T)
+	return np.array([huber_norm(calc_photo_residual(u,frame,cur_keyframe,T)/calc_photo_residual_uncertainty(u,frame,cur_keyframe,T)) for u in uu])
 
-	return [huber_norm(calc_photo_residual(u,frame,cur_keyframe,T)/calc_photo_residual_uncertainty(u,frame,cur_keyframe,T)) for u in uu]
-
-def calc_cost_jacobian(u,frame,cur_keyframe,T_s): 
-	'''
-	Calculates the residual error for the Jacobian
-
-	Arguments:
-		u: A list containing the high gradient elements
-		frame: Numpy array o the current frame
-		cur_keyframe: Previous keyframe as a Keyframe class
-		T_s: Current estimated Pose as a flattened numpy array
-
-	Returns:
-		r: Residual error as a list
-	'''
-	T = _get_back_T(T_s)
-	r = np.zeros(len(u))
-	j = 0 #Count variable
-	for i in u:
-		r[j] = huber_norm(calc_photo_residual(i,frame,cur_keyframe,T)/calc_photo_residual_uncertainty(i,frame,cur_keyframe,T))
-		j = j+1
-	return r
-
-def test(T):
-	return (T**2)[:5]
-
-def get_jacobian(dof,u,frame,cur_keyframe,T):
+def get_jacobian(dof,u,frame,cur_keyframe,T_s):
 	'''
 	Returns the Jacobian of the Residual Error wrt the Pose (r wrt T)
 
@@ -432,25 +459,33 @@ def get_jacobian(dof,u,frame,cur_keyframe,T):
 		u: An array containing the high gradient elements
 		frame: Numpy array o the current frame
 		cur_keyframe: Previous keyframe as a Keyframe class
-		T: Current estimated Pose
+		T_s: Current estimated Pose in minimal representation
 
 	Returns:
-		J: The required Jacobian
+		J: The required Jacobian (dofx6)
 	'''
-	T_s = get_min_rep(T)
-	T_c = tf.constant(T_s) #Flattened pose in tf
-	r_s = tf.constant(calc_cost_jacobian(u,frame, cur_keyframe,T_c))
-	#r_s = test(T_c)
-
-	with tf.Session() as sess:
-		print ("\n\nr_s = ",sess.run(r_s))
-		print ("T_c = ",sess.run(T_c))
-		print "T_s = ",T_s,'\n\n'
-
-		#Following works with custom test function
-		J1,J2 = tf.test.compute_gradient(T_c,(6,),r_s,(dof,),T_s) #Returns two jacobians... (Other parameters are the shapes and the initial values)
-		print ('\n\n\n',J1,'\n\n\n')
-		return J1.transpose() #6xdof #Returning jacobian transpose????
+	ratio = 5 # Change later
+	T_list1 = np.array([])
+	T_list2 = np.array([])
+	for i in range(0,6):
+		temp1 = np.array(T_s) # So it actually creates a copy and does not refer to the same array
+		temp2 = np.array(T_s)  
+		temp1[i] = T_s[i]+(ratio*T_s[i])
+		temp2[i] = T_s[i]-(ratio*T_s[i])
+		#print '\n\na == \n',T_s,'\n',temp1,'\n',temp2,'\n\n'
+		if i==0:
+			T_list1 = np.array([temp1])
+			T_list2 = np.array([temp2])
+			continue
+		T_list1 = np.append(T_list1,[temp1],0)
+		T_list2 = np.append(T_list2,[temp2],0)
+	calc_cost_v = np.vectorize(calc_cost,excluded = [0,1,2,4],signature = '(1)->(dof)')
+	r1 = calc_cost_v(u,frame,cur_keyframe,T_list1,0) # 6xdof
+	r2 = calc_cost_v(u,frame,cur_keyframe,T_list2,0) # 6xdof
+	J = np.array(r1 - r2)
+	#print T_list1,'\n\n'
+	#print T_list2
+	return J.T 
 
 def get_W(dof,stack_r):
 	'''
@@ -463,7 +498,7 @@ def get_W(dof,stack_r):
 	Returns:
 		W: Weight Matrix
 	'''
-	W = np.random.random((dof,dof))
+	W = np.zeros((dof,dof))
 	for i in range(dof): 
 		W[i][i] = (dof + 1)/(dof + stack_r[i]**2)
 	return W
@@ -487,7 +522,7 @@ def minimize_cost_func(u,frame, cur_keyframe):
 	Does Weighted Gauss-Newton Optimization
 
 	Arguments:
-		uu: List of points in high gradient areas of the current frame
+		u: array of points in high gradient areas of the current frame
 		frame: Current frame(as a Numpy array)
 		cur_keyframe: The previous keyframe of the Keyframe Class
 
@@ -495,34 +530,29 @@ def minimize_cost_func(u,frame, cur_keyframe):
 		T: The camera Pose
 	'''
 	dof = len(u)
-
 	# Random pose
 	T_s = np.random.random((6))
-	# So that the rotation matrix is valid
 	T = _get_back_T(T_s)
 
 	while True:
-		stack_r = calc_cost(u,frame,cur_keyframe,T)
-		
-		J = get_jacobian(dof,u,frame,cur_keyframe,T) #dofx6
-		Jt = J.transpose() #6xdof
-		W = get_W(dof,stack_r) #dof x dof - diagonal matrix
-		temp = np.matmul(np.matmul(Jt,W),J)
-		print ("temp = ",temp)
-		hess = np.linalg.inv(temp) # 12x12
-		delT = np.matmul(hess,Jt)
-		delT = np.matmul(delT,W)
-		T_s = get_min_rep(T)
-		delT = -np.matmul(delT,stack_r)
-		#T = np.matmul(delT.transpose(),T_s) #Or do subtraction?
-		
-		for i in range(0,6):
-			T_s[i] = T_s[i]*delT[i]
+		stack_r = np.array(calc_cost(u,frame,cur_keyframe,T)) # dofx1
+		J = get_jacobian(dof,u,frame,cur_keyframe,T_s) # dofx6
+		Jt = J.transpose() # 6xdof
+		W = get_W(dof,stack_r) # dofxdof - diagonal matrix
+		temp = np.matmul(np.matmul(Jt,W),J) # 6x6
+		hess = np.linalg.inv(temp) # 6x6
+		delT = np.matmul(hess,Jt) # 6xdof
+		delT = np.matmul(delT,W) # 6xdof
+		delT = -np.matmul(delT,stack_r) # 6x1
 
-		T = _get_back_T(T_s)
-		T = np.ones((3,4))
 		if exit_crit(delT):
 			break
+
+		delT = _get_back_T(delT) #3x4
+		delT = np.append(delT,[[0,0,0,1]],0) # 4x4
+		T_4 = np.append(T,[[0,0,0,1]],0) # 4x4
+		T = np.matmul(T_4,delT)[:3] # 3x4
+		T_s = get_min_rep(T) # 6x1
 	return T
 
 def check_keyframe(T):
@@ -609,5 +639,4 @@ def test_get_back_T():
 	print("Testing get_back_T",_get_back_T(T_s))
 
 if __name__=='__main__':
-	test_highgrad()
 	test_min_cost_func()
