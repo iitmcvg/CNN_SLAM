@@ -5,6 +5,7 @@
 # delr/delu = delr/delx + delr/dely - should we divide by 2 or something or find the root of sum of squares
 
 # To do
+# Put hyperparamaters in some doc
 # Change exit criteria
 # Make sure values are in float before finding inverse(1.0/x)
 # See if the entire keyframe needs to be passed everytime. Sometimes only the image needs to be passed
