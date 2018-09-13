@@ -5,10 +5,12 @@
 # delr/delu = delr/delx + delr/dely - should we divide by 2 or something or find the root of sum of squares
 
 # To do
+# Dont just cast to int. Interpolate instead. Make sure you are doing inverse warping and not forward
+# Pixel from keyframe should always be propagated
 # Put hyperparamaters in some doc
 # Change exit criteria
 # Make sure values are in float before finding inverse(1.0/x)
-# See if the entire keyframe needs to be passed everytime. Sometimes only the image needs to be passed
+# See if the entire keyframe needs to be passed everytime. Sometimes only the image needs to be passed. (See in stereo match also)
 
 '''
 Camera Pose Estimation
@@ -43,8 +45,8 @@ Variable nomenclature:
 im_size = (480,640)
 sigma_p = 5 # Some white noise variance thing
 index_matrix = np.dstack(np.meshgrid(np.arange(480),np.arange(640),indexing = 'ij'))
-cam_matrix = np.eye(3,3) #Change later
-cam_matrix_inv = np.eye(3,3) #Change later
+cam_matrix = np.eye(3,3) # 3x3 Intrinsic camera matrix - converts 3x3 point in camera frame to homogeneous repreentation of an image coordiante
+cam_matrix_inv = np.linalg.inv(cam_matrix)
 
 class Keyframe:
 	def __init__(self, pose, depth, uncertainty, image):
@@ -171,15 +173,15 @@ def find_uncertainty(u,D,D_prev,T):
 
 	Returns: Uncertainty at position u
 	'''
-	u=np.append(u,np.ones(1)) #Convert to homogeneous
+	u = np.append(u,np.ones(1)) #Convert to homogeneous
 
 	V = D * np.matmul(cam_matrix_inv,u) #World point
-	V=np.append(V,np.ones(1))
+	V = np.append(V,np.ones(1))
 
 	u_prop = np.matmul(cam_matrix,T)
 	u_prop = np.matmul(u_prop,V)
 	u_prop = u_prop/u_prop[2]
-	u_prop=u_prop[:-1]
+	u_prop = u_prop[:-1]
 
 	U = D[u[0]][u[1]] - D_prev[u_prop[0]][u_prop[1]]
 	return U**2
