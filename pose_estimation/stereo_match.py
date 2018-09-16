@@ -1,5 +1,6 @@
-# See semi-dense visual odometry
-# Do we need prev_cost
+# Interpolation?
+# Post processing on disparity map?
+# Match windows not pixels
 
 # Do normalized corelation
 # Try out window sizes
@@ -7,10 +8,12 @@
 # Can do some stuff later like blurring or adge enhancement and all?
 # See graph cuts or DP formulations
 
+#Always index images as x and then y
+
 '''
 Small Baseline Stereo Matching
 '''
-
+import cv2
 import numpy as np
 
 # Put in some doc later
@@ -52,56 +55,32 @@ def find_epipolar_lines(u,E):
 
 	return line1,line2
 
-def calc_cost_stereo(five_points,line2,j,frame,cur_keyframe):
-	five_points_2 = np.zeros((5,2))
-	cost = 0
-	for i in range(5):
-		five_points_2[i] = [(-1-line2[0]*(i+j))/line2[1],i+j]
-		cost = cost + (cur_keyframe.I[five_points[i][0],five_points[i][1]] - frame[five_points_2[i][0],five_points_2[i][1]])**2
-	return cost
 
-def calc_cost_stereo_change(prev_cost,five_points,j,line2,frame,cur_keyframe):
-	prev_cost = prev_cost - (cur_keyframe.I[five_points[0][0],five_points[0][1]] - frame[(-1-line2[0]*(i+j-1))/line2[1],i+j-1])**2
-	prev_cost = prev_cost + (cur_keyframe.I[five_points[0][0],five_points[0][1]] - frame[(-1-line2[0]*(i+j-1))/line2[1],i+j-1])**2
+def five_pixel_match(D,img1,img2):
+	'''
+	Computes the disparity map for two parallel plane images img1 and img2
+	'''
+	std_dev = int((np.var(img2))**0.5) # Standard Deviation
 
-def calc_disp():
-
-
-def disp_to_depth():
-
-def five_pixel_match(D,frame,cur_keyframe,line1,line2):
-	var = np.var(frame) # Variance of frame
-	five_points = np.zeros((5,2)) # Points in cur_keyframe
-	for i in range(im_size(1)-4): # i is the first pixel
-
-		# Get the five points in cur_keyframe
-		for j in range(5): 
-			five_points[j] = [i+j,(-1-line1[0]*(i+j))/line1[1]]
-		start = 0
-
-		# For points in frame
-		for j in range(i - int(3*var*line2[1]/line2[0]),i+int(3*var*line2[1]/line2[0])): # j goes from i - 3*sigma*cos(theta) to i + 3*sigma*cos(theta) - x values
-			if j<0:
-				continue
-			if j>im_size(1):
-				break
-			if start == 0:
-				min_cost = calc_cost_stereo(five_points,line2,j,frame,cur_keyframe)
-				min_pos = j
-				start = 1
-				prev_cost = min_cost
-				continue
-			cost = calc_cost_stereo(five_points,line2,j,frame,cur_keyframe)
-			prev_cost = cost
-			if (cost<min_cost):
-				min_cost = cost
-				min_pos = j
-		# Pixels being matched
-		min_pos = min_pos + 2
-		i = i+2
-		disp = calc_disp(min_pos,i,line1,line2)
-		D[i,(-1-(a*i))/line1[1]] = disp_to_depth(disp)
-		return D
+	for i in range(im_size[0]):
+		for j in range(im_size[1] - 4):
+			five_points = np.zeros(5)
+			for k in range(5):
+				five_points[k] = img1[j+k][i]
+			min_cost = -1
+			min_pos = -1
+			for k in range(j-2*std_dev,j+2*std_dev+1):
+				if(k<0 or k+5>640):
+					continue
+				cost = 0
+				for l in range(5):
+					cost = cost + (five_points[l] - img2[k+l][i])**2
+				if cost>min_cost:
+					min_cost = cost
+					min_pos = k
+			D[i][j+2] = (min_pos + im_size[1] - j-2)*(255/850.0)
+			print i,D[i][j+2],'\n'
+	return D
 
 def stereo_match(cur_keyframe,frame,T):
 	'''
@@ -120,8 +99,21 @@ def stereo_match(cur_keyframe,frame,T):
 
 	for i in range(im_size[0]):
 		line1,line2 = find_epipolar_lines((0,i),E) # line 1 is in cur_keyframe and line2 in frame. Each line is of the form (a,b) so that ax + by +1 = 0
-		D = five_pixel_match(D,frame,cur_keyframe,line1,line2)
+		D = five_pixel_match(D,frame,cur_keyframe.I,line1,line2)
 
 		#Check which parts of keyframe havent been matched yet
 	
 	return D
+
+def test_stereo_match():
+	img1 = cv2.resize(cv2.imread("stereo.jpeg",0),im_size,interpolation = cv2.INTER_CUBIC)
+	img2 = cv2.resize(cv2.imread("stereo(1).jpeg",0),im_size,interpolation = cv2.INTER_CUBIC)
+	im1 = np.array(img1)
+	im2 = np.array(img2)
+	D = np.zeros(im_size)
+	D = five_pixel_match(D,img1,img2)
+	cv2.imshow('dawwd',D)
+	cv2.waitKey(0)
+
+if __name__=='__main__':
+	test_stereo_match()
