@@ -1,4 +1,5 @@
 # Overflow warnings and other errors while running
+# See Gauss Newton in Zisserman
 
 # Check later
 # Newton gauss is for least squares; Here we are using for huber norm (also should huber norm be included in the calculation of individual costs)

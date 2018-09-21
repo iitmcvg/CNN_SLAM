@@ -118,7 +118,9 @@ def main():
 
 			else:
 				#If it is not a keyframe do small baseline stereo matching to refine the depth map of previous keyframe
-				K[cur_index] = refine_depth_map(frame,T,cur_keyframe)
+				
+				# Change following. Send in two normal frames of the same previous keyframe
+				#K[cur_index] = refine_depth_map(frame,T,cur_keyframe)  
 				cur_keyframe = K[cur_index]
 				_delay()
 
