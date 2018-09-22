@@ -1,12 +1,11 @@
-# Use two frames to compute depth. Not one frame and one keyframe
+# Find standard deviation for whole image?
 # Interpolation?
 # Post processing on disparity map?
-# Match windows not pixels
+# Check do_transform
+
 
 # See SVD and minimizing least squares in Zisserman
 # Do normalized corelation
-# Try out window sizes
-# How to get deoth from disparity for verged cameras
 # Can do some stuff later like blurring or adge enhancement and all?
 # See graph cuts or DP formulations
 
@@ -28,6 +27,11 @@ def get_essential_matrix(T):
 	'''
 	Returns the essential matrix E given the pose T
 	'''
+	t = T[:3,3]
+	R = T[:3,:3] # 3x3
+	tx = np.array([[0,-t[2],t[1]],[t[2],0,-t[0]],[-t[1],t[0],0]])
+	E = np.matmul(tx,R)
+	return E
 
 """
 def find_epipolar_lines(u,E):
@@ -83,7 +87,7 @@ def get_H2(frame,e,F):
 	T = np.array([[1,0,-im_size[1]/2],[0,1,im_size[0]/2],[0,0,1]])
 	e_trans = np.matmul(T,e)
 
-	# Rotate epipole so that its on the x axis. e_trans should go to 
+	# Rotate epipole so that its on the x axis. e_trans should go to infinity
 	e_new = np.array([(e_trans[0]**2 + e_trans[1]**2)**0.5,0,1])
 	cos = np.dot(e_new,e_trans)/(e_trans[0]**2 + e_trans[1]**2)
 	sin = (1-cos**2)**0.5
@@ -96,11 +100,13 @@ def get_H2(frame,e,F):
 	H2 = np.matmul(G,np.matmul(R,T))
 	return H2
 
+# Check
 def do_transform(frame,H):
 	'''
 	Transforms frame according to projective transform H
 	'''
-	
+	dst = cv2.warpPerspective(frame,H,im_size)
+	return dst 
 
 def rectify_frames(frame1,frame2,F,rel_T):
 	'''
@@ -124,15 +130,20 @@ def rectify_frames(frame1,frame2,F,rel_T):
 	M = np.matmul(camera_matrix,np.matmul(R,camera_matrix))
 
 	# Need to find Ha
-	a,b,c = 1,1,1 # Initialise randomly later
-	Ha = np.array([[a,b,c],[0,1,0],[0,0,1]])
-	H1 = np.matmul(H2,np.matmul(M,Ha))
-
-	# Minimise and find a,b,c (reevaluate H1)
-
-	frame1_rect = do_transform(frame1,H1)
+	a,b,c = 1,0,0 # Initialise randomly later
+	H0 = np.matmul(H2,M)
 	frame2_rect = do_transform(frame2,H2)
-	rect_rel_T = get_rect_pose()
+	frame1_temp = do_transform(frame1,H0)
+
+
+	# Minimise and find a,b,c (or just take as 1,0,0?)
+
+
+	Ha = np.array([[a,b,c],[0,1,0],[0,0,1]])
+	H1 = np.matmul(Ha,H0)
+	frame1_rect = do_transform(frame1,H1)
+
+	rect_rel_T = get_rect_pose() # Use old baseline only? Its small enough
 	return frame1_rect,frame2_rect,rect_rel_T
 
 def five_pixel_match(img1,img2):
@@ -179,6 +190,7 @@ def depth_from_disparity(disparity_map,T):
 	Returns: 
 		depth_map
 	'''
+	
 
 
 def stereo_match(frame1,frame2,T1,T2):
