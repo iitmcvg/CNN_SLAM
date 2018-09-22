@@ -59,23 +59,81 @@ def find_epipolar_lines(u,E):
 	return line1,line2
 """
 
-def rectify_frames(frame1,frame2,F):
+def find_epipoles(F):
+	'''
+	F.e1 = 0
+	F.transpose.e2 = 0
+	'''
+	e1 = np.cross(F[0],F[1])
+	e1 = e1/e1[2]
+	e2 = np.cross(F[:,0],F[:,1])
+	e2 = e2/e2[2]
+
+	if(np.dot(F[2],e1)!=0 or np.dot(F[:2].e2)!=0):
+		print "Error with finding epipoles"
+		# Add something here for error handling
+
+	return e1,e2
+
+def get_H2(frame,e,F):
+	'''
+	H2 = GRT
+	'''
+	# Move center of image to (0,0)
+	T = np.array([[1,0,-im_size[1]/2],[0,1,im_size[0]/2],[0,0,1]])
+	e_trans = np.matmul(T,e)
+
+	# Rotate epipole so that its on the x axis. e_trans should go to 
+	e_new = np.array([(e_trans[0]**2 + e_trans[1]**2)**0.5,0,1])
+	cos = np.dot(e_new,e_trans)/(e_trans[0]**2 + e_trans[1]**2)
+	sin = (1-cos**2)**0.5
+	R = np.array([[cos,-sin,0],[sin,cos,0],[0,0,1]])
+
+	# Move epipole to infinity
+	G = np.eye(3)
+	G[2][0] = -1/(e_new[0])
+
+	H2 = np.matmul(G,np.matmul(R,T))
+	return H2
+
+def do_transform(frame,H):
+	'''
+	Transforms frame according to projective transform H
+	'''
+	
+
+def rectify_frames(frame1,frame2,F,rel_T):
 	'''
 	Makes the image planes parallel
 
 	Arguments:
 		frame1: First image
 		frame2: Second image
-		E: Fundamental matrix (frame1 to frame2)
+		E: Fundamental matrix (frame1 to frame2). frame2 is x'. x'Fx = 0
 
 	Returns:
 		frame_rect_1: Rectified image1
 		frame_rect_2: Rectified image2
 		rect_rel_T: Rectified relative pose
 	'''
+	e1,e2 = find_epipoles(F) # F.e1 = 0 and (F.T).e2 = 0. e1 and e2 in homogeneous form
+	H2 = get_H2(frame2,e2,F) # H2 = GRT
 	
+	# Compute H1 = H2.M.Ha
+	R = rel_T[:3,:3]
+	M = np.matmul(camera_matrix,np.matmul(R,camera_matrix))
 
+	# Need to find Ha
+	a,b,c = 1,1,1 # Initialise randomly later
+	Ha = np.array([[a,b,c],[0,1,0],[0,0,1]])
+	H1 = np.matmul(H2,np.matmul(M,Ha))
 
+	# Minimise and find a,b,c (reevaluate H1)
+
+	frame1_rect = do_transform(frame1,H1)
+	frame2_rect = do_transform(frame2,H2)
+	rect_rel_T = get_rect_pose()
+	return frame1_rect,frame2_rect,rect_rel_T
 
 def five_pixel_match(img1,img2):
 	'''
@@ -139,7 +197,7 @@ def stereo_match(frame1,frame2,T1,T2):
 	rel_T = np.matmul(np.linalg.inv(T1),T2) # Go from frame1 to prev keyframe and then to frame2
 	E = get_essential_matrix(rel_T)
 	F = np.matmul(camera_matrix_inv.T,np.matmul(E,camera_matrix_inv)) # Fundamental Matrix
-	frame_rect_1,frame_rect_2,rect_rel_T = rectify_frames(frame1,frame2,F)
+	frame_rect_1,frame_rect_2,rect_rel_T = rectify_frames(frame1,frame2,F,rel_T)
 	disparity_map = five_pixel_match(frame1,frame2) # Disparity map
 	depth_map = depth_from_disparity(disparity_map,rect_rel_T)
 	return depth_map
