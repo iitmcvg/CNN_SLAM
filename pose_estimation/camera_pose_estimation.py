@@ -483,7 +483,7 @@ def get_jacobian(dof,u,frame,cur_keyframe,T_s):
 			continue
 		T_list1 = np.append(T_list1,[temp1],0)
 		T_list2 = np.append(T_list2,[temp2],0)
-	calc_cost_v = np.vectorize(calc_cost,excluded = [0,1,2,4],signature = '(1)->(dof)')
+	calc_cost_v = np.vectorize(calc_cost,excluded = [0,1,2,4],signature = '(1)->(dof)') # Dont tell number of rows. Just tell shape of each row(for input and output)
 	r1 = calc_cost_v(u,frame,cur_keyframe,T_list1,0) # 6xdof
 	r2 = calc_cost_v(u,frame,cur_keyframe,T_list2,0) # 6xdof
 	J = np.array(r1 - r2)

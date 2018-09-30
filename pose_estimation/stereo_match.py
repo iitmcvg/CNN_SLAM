@@ -1,3 +1,5 @@
+# Change k to 2k in stereo matching
+
 # Find standard deviation for whole image?
 # Interpolation?
 # Post processing on disparity map?
@@ -10,7 +12,7 @@
 # See graph cuts or DP formulations
 
 # Always index images as x and then y
-
+# when trying to display a numpy array as an image, noralize to (0,1)
 '''
 Small Baseline Stereo Matching
 '''
@@ -87,7 +89,7 @@ def get_H2(frame,e,F):
 	T = np.array([[1,0,-im_size[1]/2],[0,1,im_size[0]/2],[0,0,1]])
 	e_trans = np.matmul(T,e)
 
-	# Rotate epipole so that its on the x axis. e_trans should go to infinity
+	# Rotate epipole so that its on the x axis
 	e_new = np.array([(e_trans[0]**2 + e_trans[1]**2)**0.5,0,1])
 	cos = np.dot(e_new,e_trans)/(e_trans[0]**2 + e_trans[1]**2)
 	sin = (1-cos**2)**0.5
@@ -146,37 +148,72 @@ def rectify_frames(frame1,frame2,F,rel_T):
 	rect_rel_T = get_rect_pose() # Use old baseline only? Its small enough
 	return frame1_rect,frame2_rect,rect_rel_T
 
+def actual_match(vec1,vec2):
+	std_dev = int((np.var(vec2))**0.5)
+	D = np.ones(im_size[1])*0.05
+	for j in range(im_size[1] - 8):
+		five_points = np.zeros(5)
+		for k in range(5):
+			five_points[k] = vec1[j+2*k]
+		min_cost = -1
+		min_pos = -1
+		for k in range(j-2*std_dev,j+2*std_dev+1):
+			if(k<0 or k+10>im_size[1]):
+				continue
+			cost = 0
+			for l in range(5):
+				cost = cost + (five_points[l] - vec2[k+2l])**2
+			if min_cost == -1:
+				min_cost = cost
+				min_pos = k + 4
+			if cost<min_cost:
+				#print cost,min_cost,j,k
+				min_cost = cost
+				min_pos = k + 4
+		D[j+2] = np.abs(min_pos- j) #Add im_size(0) also? (and take abs)?
+	return D
+
 def five_pixel_match(img1,img2):
 	'''
 	Computes the disparity map for two parallel plane images img1 and img2
 	'''
 	D = np.zeros(im_size) # Initilize with some white noise variance?
+	"""
 	std_dev = int((np.var(img2))**0.5) # Standard Deviation
 	for i in range(im_size[0]):
-		for j in range(im_size[1] - 4):
+		for j in range(im_size[1] - 8):
 			five_points = np.zeros(5)
 			for k in range(5):
-				five_points[k] = img1[i][j+k]
+				five_points[k] = img1[i][j+2*k]
 			min_cost = -1
 			min_pos = -1
 			for k in range(j-2*std_dev,j+2*std_dev+1):
-				if(k<0 or k+5>640):
+				if(k<0 or k+10>im_size[1]):
 					continue
 				cost = 0
 				for l in range(5):
-					cost = cost + (five_points[l] - img2[i][k+l])**2
+					cost = cost + (five_points[l] - img2[i][k+2l])**2
 				if min_cost == -1:
 					min_cost = cost
-					min_pos = k 
+					min_pos = k + 4
 				if cost<min_cost:
 					#print cost,min_cost,j,k
 					min_cost = cost
-					min_pos = k
-			D[i][j+2] = (min_pos + im_size[1] - j)*(255/850.0)*(2/3.0)*(0.001) # Do we need im_size
+					min_pos = k + 4
+			D[i][j+2] = (min_pos + im_size[1] - j)*(255/850.0)*(2/3.0) # Do we need im_size
 			#print i,D[i][j+2],j+2 - min_pos,'\n'
 			print i,j,D[i][j+2],'\n'
-		cv2.imshow('dawd',D)
-		cv2.waitKey(0)
+		"""
+	actual_match_v = np.vectorize(actual_match,signature = '(1),(1)->(1)')
+	D = actual_match_v(img1,img2)
+	D = D*4.0/255.0
+	print D
+	"""D = 1.0/(D + 0.05)
+	print np.amin(D),np.amax(D)
+	D = (D/np.amax(D))*50+0.2
+	print D"""
+	cv2.imshow('dawd',D)
+	cv2.waitKey(0)
 	return D
 
 def depth_from_disparity(disparity_map,T):
@@ -190,7 +227,8 @@ def depth_from_disparity(disparity_map,T):
 	Returns: 
 		depth_map
 	'''
-	
+	#	return disparity_map/T[]
+
 
 
 def stereo_match(frame1,frame2,T1,T2):
@@ -220,7 +258,7 @@ def test_stereo_match():
 	im1 = np.array(img1)
 	im2 = np.array(img2)
 	D = np.zeros(im_size)
-	D_1 = five_pixel_match(D,img1,img2)
+	D_1 = five_pixel_match(img1,img2)
 	#cv2.imshow('dawwd',D_1)
 	#cv2.waitKey(0)
 
