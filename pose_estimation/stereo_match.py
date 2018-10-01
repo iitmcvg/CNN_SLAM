@@ -1,11 +1,12 @@
-# Change k to 2k in stereo matching
+# See https://docs.opencv.org/2.4/modules/calib3d/doc/camera_calibration_and_3d_reconstruction.html
+# Need camera matrix for depth from disparity
 
 # Find standard deviation for whole image?
 # Interpolation?
 # Post processing on disparity map?
 # Check do_transform
 
-
+# Try increasing search range
 # See SVD and minimizing least squares in Zisserman
 # Do normalized corelation
 # Can do some stuff later like blurring or adge enhancement and all?
@@ -137,7 +138,6 @@ def rectify_frames(frame1,frame2,F,rel_T):
 	frame2_rect = do_transform(frame2,H2)
 	frame1_temp = do_transform(frame1,H0)
 
-
 	# Minimise and find a,b,c (or just take as 1,0,0?)
 
 
@@ -151,13 +151,14 @@ def rectify_frames(frame1,frame2,F,rel_T):
 def actual_match(vec1,vec2):
 	std_dev = int((np.var(vec2))**0.5)
 	D = np.ones(im_size[1])*0.05
-	for j in range(im_size[1] - 8):
+	for j in range(im_size[1] - 4):
 		five_points = np.zeros(5)
 		for k in range(5):
-			five_points[k] = vec1[j+2*k]
+			five_points[k] = vec1[j+k]
+		
 		min_cost = -1
 		min_pos = -1
-		for k in range(j-2*std_dev,j+2*std_dev+1):
+		for k in range(j-2*std_dev,j+2*std_dev+1): # Change to 2?
 			if(k<0 or k+10>im_size[1]):
 				continue
 			cost = 0
@@ -170,6 +171,20 @@ def actual_match(vec1,vec2):
 				#print cost,min_cost,j,k
 				min_cost = cost
 				min_pos = k + 4
+		"""
+		l = 0
+		u = 8
+		if j-2*std_dev>0:
+			l = j-2*std_dev
+		else :
+			l = 0
+		if j+2*std_dev+1+5>im_size[1]: #Check
+			u = im_size[1]
+		else:
+			u = j+2*std_dev+1
+		vec = np.flip(vec2,axis = 0) # change search range
+		corr = np.correlate(five_points,vec)
+		min_pos = np.argmax(corr)+2"""
 		D[j+2] = np.abs(min_pos- j) #Add im_size(0) also? (and take abs)?
 	return D
 
@@ -206,14 +221,17 @@ def five_pixel_match(img1,img2):
 		"""
 	actual_match_v = np.vectorize(actual_match,signature = '(1),(1)->(1)')
 	D = actual_match_v(img1,img2)
-	D = D*4.0/255.0
+	D = D/(255.0)
 	print D
 	"""D = 1.0/(D + 0.05)
 	print np.amin(D),np.amax(D)
 	D = (D/np.amax(D))*50+0.2
-	print D"""
+	print D
 	cv2.imshow('dawd',D)
-	cv2.waitKey(0)
+	cv2.waitKey(0)"""
+	D = cv2.GaussianBlur(D,(5,5),0)
+	plt.imshow(D,'gray')
+   	plt.show()
 	return D
 
 def depth_from_disparity(disparity_map,T):
@@ -227,9 +245,7 @@ def depth_from_disparity(disparity_map,T):
 	Returns: 
 		depth_map
 	'''
-	#	return disparity_map/T[]
-
-
+	return disparity_map/(T[3,0]**2 + T[3,1]**2 + T[3,2]**2)**0.5
 
 def stereo_match(frame1,frame2,T1,T2):
 	'''
@@ -252,15 +268,24 @@ def stereo_match(frame1,frame2,T1,T2):
 	depth_map = depth_from_disparity(disparity_map,rect_rel_T)
 	return depth_map
 
-def test_stereo_match():
+def test_5_match():
 	img1 = cv2.resize(cv2.imread("stereo.jpeg",0),(im_size[1],im_size[0]),interpolation = cv2.INTER_CUBIC)
 	img2 = cv2.resize(cv2.imread("stereo(1).jpeg",0),(im_size[1],im_size[0]),interpolation = cv2.INTER_CUBIC)
 	im1 = np.array(img1)
 	im2 = np.array(img2)
 	D = np.zeros(im_size)
 	D_1 = five_pixel_match(img1,img2)
-	#cv2.imshow('dawwd',D_1)
-	#cv2.waitKey(0)
+	"""stereo = cv2.StereoBM_create(numDisparities=16, blockSize=15)
+	disparity = stereo.compute(img1,img2)
+	cv2.imshow('dawwd',disparity)
+	cv2.waitKey(0)"""
+
+def test_stereo_match():
+	img1 = cv2.resize(cv2.imread("stereo.jpeg",0),(im_size[1],im_size[0]),interpolation = cv2.INTER_CUBIC)
+	img2 = cv2.resize(cv2.imread("stereo(1).jpeg",0),(im_size[1],im_size[0]),interpolation = cv2.INTER_CUBIC)
+	T1 = np.array([[1,0,0,5],[0,1,0,0],[0,0,1,0]])
+	T2 = np.array([[1,0,0,7],[0,1,0,0],[0,0,1,0]])
+	stereo_match(img1,img2,T1,T2)
 
 if __name__=='__main__':
-	test_stereo_match()
+	test_5_match()
