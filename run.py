@@ -12,6 +12,7 @@ import pose_estimation.depth_map_fusion as depth_map_fusion
 import pose_estimation.camera_pose_estimation as camera_pose_estimation
 import pose_estimation.define_depth_map as define_depth_map
 import pose_estimation.find_uncertainty as find_uncertainty
+import graph_optimization.update_pose_graph as update_pose_graph
 from pose_estimation import monodepth
 
 im_size = (480,640)
@@ -111,8 +112,8 @@ def main():
 			K[cur_index].D,K[cur_index].U = depth_map_fusion.fuse_depth_map(K[cur_index],K[cur_index - 1])
 			cur_keyframe = K[cur_index]
 
-			update_pose_graph()
-			do_graph_optimization()
+			update_pose_graph.update_pose_graph()
+			update_pose_graph.graph_optimization()
 
 		else: # Refine and fuse depth map. Stereo matching consecutive frame
 			D_frame = stereo_match.stereo_match(prev_frame,frame,prev_pose,T)
