@@ -1,3 +1,5 @@
+# Check all incomplete functions
+
 # Libraries
 import numpy as np 
 import cv2
@@ -7,12 +9,11 @@ import time
 import argparse
 
 # Modules
-import pose_estimation.refine_depth_map as refine_depth_map
 import pose_estimation.depth_map_fusion as depth_map_fusion
 import pose_estimation.camera_pose_estimation as camera_pose_estimation
-import pose_estimation.define_depth_map as define_depth_map
 import pose_estimation.find_uncertainty as find_uncertainty
-import graph_optimization.update_pose_graph as update_pose_graph
+import pose_estimation.stereo_match as stereo_match
+# import graph_optimization.update_pose_graph as update_pose_graph
 from pose_estimation import monodepth
 
 im_size = (480,640)
@@ -29,6 +30,13 @@ args = parser.parse_args()
 
 # Video cam
 cam = cv2.VideoCapture(0)
+
+class Keyframe:
+	def __init__(self, pose, depth, uncertainty, image):
+		self.T = pose # 4x4 transformation matrix # 6 vector
+		self.D = depth
+		self.U = uncertainty
+		self.I = image
 
 def get_camera_image():
 	'''
@@ -55,11 +63,35 @@ def get_camera_matrix(path=None):
 	else:
 		return np.eye(3)
 
-def _exit_program():
+def get_highgrad_element(img):
+	'''
+	Finds high gradient areas in the image
 
+	Arguments:
+		img: Input image
+
+	Returns:
+		u: Array of pixel locations
+		Shape (X,2)
+		X: number of high grad elements
+	'''
+	threshold = 100
+	laplacian = cv2.Laplacian(img,cv2.CV_8U)
+	ret,thresh = cv2.threshold(laplacian,threshold,255,cv2.THRESH_BINARY)
+	u = cv2.findNonZero(thresh) # Returns in (x,y) format. Need to exchange
+	u = np.squeeze(np.array(u))
+	temp = np.copy(u[:,0])
+	u[:,0] = u[:,1]
+	u[:,1] = temp
+	return np.squeeze(np.array(u))
+
+def check_keyframe(T):
+	return 0 # Change later
+
+def _exit_program():
+	raise NotImplementedError
 
 def main():
-
 	# INIT monodepth session
 	sess=monodepth.init_monodepth(args.mono_checkpoint_path)
 
@@ -77,8 +109,10 @@ def main():
 	# List of keyframe objects
 	K = []
 
-	# Append first frame to K
+	# Predict depth
 	ini_depth = monodepth.get_cnn_depth(sess,image)
+	cv2.imshow('dawd',ini_depth)
+	cv2.waitKey(0)
 
     # Initalisation
 	ini_uncertainty = find_uncertainty.get_initial_uncertainty()
@@ -97,7 +131,7 @@ def main():
 			_exit_program()
 
         # Finds the high gradient pixel locations in the current frame
-		u = camera_pose_estimation.get_highgrad_element(frame) 
+		u = get_highgrad_element(frame) 
 
         # Finds pose of current frame by minimizing photometric residual (wrt prev keyframe)
 		T = camera_pose_estimation.minimize_cost_func(u,frame,cur_keyframe) 
@@ -107,7 +141,11 @@ def main():
 			depth = monodepth.get_cnn_depth(sess,image)	
 			cur_index += 1
 			uncertainty = find_uncertainty.get_uncertainty(T,D,K[cur_index - 1])
+			T = np.append(T,np.array([[0,0,0,1]]),0)
+			cur_keyframe.T = np.append(cur_keyframe.T,np.array([[0,0,0,1]]),0)
 			T_abs = np.matmul(T,cur_keyframe.T) # absolute pose of the new keyframe
+			T = T[:3]
+			cur_keyframe.T = cur_keyframe.T[:3]
 			K.append(Keyframe(T_abs,depth,uncertainty,frame))
 			K[cur_index].D,K[cur_index].U = depth_map_fusion.fuse_depth_map(K[cur_index],K[cur_index - 1])
 			cur_keyframe = K[cur_index]
@@ -126,5 +164,93 @@ def main():
 		prev_pose = T
 		continue
 
+def test_without_cnn():
+	keyf1 = cv2.resize(cv2.imread("pose_estimation/stereo.jpeg"),(im_size[1],im_size[0]),interpolation = cv2.INTER_CUBIC)
+	f = cv2.resize(cv2.imread("pose_estimation/stereo(1).jpeg"),(im_size[1],im_size[0]),interpolation = cv2.INTER_CUBIC)
+	gray_keyf1 = cv2.cvtColor(keyf1,cv2.COLOR_BGR2GRAY)
+	# INIT camera matrix
+	cam_matrix = get_camera_matrix()
+
+	try: 
+		cam_matrix_inv = np.linalg.inv(cam_matrix)
+	except:
+		raise (Error, "Verify camera matrix")
+
+	# Image is 3 channel, frame is grayscale
+	ret,image,frame = 1,keyf1,gray_keyf1
+
+	# List of keyframe objects
+	K = []
+
+	# Predict depth
+	ini_depth = np.random.random(im_size)*255
+
+    # Initalisation
+	ini_uncertainty = find_uncertainty.get_initial_uncertainty()
+	ini_pose = camera_pose_estimation.get_initial_pose()
+
+	K.append(Keyframe(ini_pose,ini_depth,ini_uncertainty,frame)) 
+	cur_keyframe = K[0]
+	cur_index = 0
+	prev_frame = cur_keyframe.I
+	prev_pose = cur_keyframe.T
+
+	# ret,image,frame = get_camera_image() # frame is the numpy array
+
+	print "*****************************"
+	print "Initialised first keyframe"
+	print "*****************************\n"
+
+	frame = cv2.cvtColor(f,cv2.COLOR_BGR2GRAY)
+    # Finds the high gradient pixel locations in the current frame
+	u = get_highgrad_element(frame) 
+ 
+	print "**********************************************"
+	print "Got high grad elements. Going to estimate pose"
+	print "**********************************************\n"
+
+    # Finds pose of current frame by minimizing photometric residual (wrt prev keyframe)
+	T = camera_pose_estimation.minimize_cost_func(u,frame,cur_keyframe) 
+            
+	print "*****************************"
+	print "Estimated Pose"
+	print "*****************************\n"
+	print "T = ", T,'\n'
+
+	if check_keyframe(T):	
+		print "Error: second frame cant be keyframe\n"		
+		# If it is a keyframe, add it to K after finding depth and uncertainty map                    
+		depth = monodepth.get_cnn_depth(sess,image)	
+		cur_index += 1
+		uncertainty = find_uncertainty.get_uncertainty(T,D,K[cur_index - 1])
+		T = np.append(T,np.array([[0,0,0,1]]),0)
+		cur_keyframe.T = np.append(cur_keyframe.T,np.array([[0,0,0,1]]),0)
+		T_abs = np.matmul(T,cur_keyframe.T) # absolute pose of the new keyframe
+		T = T[:3]
+		cur_keyframe.T = cur_keyframe.T[:3]
+		K.append(Keyframe(T_abs,depth,uncertainty,frame))
+		K[cur_index].D,K[cur_index].U = depth_map_fusion.fuse_depth_map(K[cur_index],K[cur_index - 1])
+		cur_keyframe = K[cur_index]
+
+		update_pose_graph.update_pose_graph()
+		update_pose_graph.graph_optimization()
+
+	else: # Refine and fuse depth map. Stereo matching consecutive frame
+		print "*****************************"
+		print "Going to do stereo matching"
+		print "*****************************\n"
+		D_frame = stereo_match.stereo_match(prev_frame,frame,prev_pose,T)
+		print "*****************************"
+		print "Stereo Matching Done"
+		print "*****************************\n"
+		cv2.imshow("awdaw",D_frame)
+		cv2.waitKey(0)
+		U_frame = find_uncertainty.get_uncertainty(T,D_frame,cur_keyframe)
+		frame_obj = Keyframe(T,D_frame,U_frame,frame) # frame as a keyframe object
+		cur_keyframe.D,cur_keyframe.U = depth_map_fusion.fuse_depth_map(frame_obj,cur_keyframe)
+		
+	cv2.imshow("twrer",K[cur_index].D)
+	cv2.waitKey(0)
+
 if __name__ == "__main__":
-	main()
+	test_without_cnn()

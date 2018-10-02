@@ -1,3 +1,4 @@
+# Error with fnding epipoles
 # See https://docs.opencv.org/2.4/modules/calib3d/doc/camera_calibration_and_3d_reconstruction.html
 # Need camera matrix for depth from disparity
 
@@ -75,7 +76,7 @@ def find_epipoles(F):
 	e2 = np.cross(F[:,0],F[:,1])
 	e2 = e2/e2[2]
 
-	if(np.dot(F[2],e1)!=0 or np.dot(F[:2].e2)!=0):
+	if(np.dot(F[2],e1)!=0 or np.dot(F[:,2],e2)!=0):
 		print "Error with finding epipoles"
 		# Add something here for error handling
 
@@ -109,6 +110,9 @@ def do_transform(frame,H):
 	'''
 	dst = cv2.warpPerspective(frame,H,im_size)
 	return dst 
+
+def get_rect_pose(T):
+	return T # Change later
 
 def rectify_frames(frame1,frame2,F,rel_T):
 	'''
@@ -144,7 +148,7 @@ def rectify_frames(frame1,frame2,F,rel_T):
 	H1 = np.matmul(Ha,H0)
 	frame1_rect = do_transform(frame1,H1)
 
-	rect_rel_T = get_rect_pose() # Use old baseline only? Its small enough
+	rect_rel_T = get_rect_pose(rel_T) # Use old baseline only? Its small enough
 	return frame1_rect,frame2_rect,rect_rel_T
 
 def actual_match(vec1,vec2):
@@ -221,17 +225,13 @@ def five_pixel_match(img1,img2):
 	actual_match_v = np.vectorize(actual_match,signature = '(1),(1)->(1)')
 	D = actual_match_v(img1,img2)
 	D = D/(255.0)
-	print D
 	"""D = 1.0/(D + 0.05)
 	print np.amin(D),np.amax(D)
 	D = (D/np.amax(D))*50+0.2
 	print D
 	cv2.imshow('dawd',D)
 	cv2.waitKey(0)"""
-	D = cv2.medianBlur(D,5)
-
-	plt.imshow(D,'gray')
-   	plt.show()
+	#D = cv2.medianBlur(D,5)
 	return D
 
 def depth_from_disparity(disparity_map,T):
@@ -245,7 +245,7 @@ def depth_from_disparity(disparity_map,T):
 	Returns: 
 		depth_map
 	'''
-	return disparity_map/(T[3,0]**2 + T[3,1]**2 + T[3,2]**2)**0.5
+	return disparity_map/(T[0,3]**2 + T[1,3]**2 + T[2,3]**2)**0.5
 
 def stereo_match(frame1,frame2,T1,T2):
 	'''
@@ -260,7 +260,10 @@ def stereo_match(frame1,frame2,T1,T2):
 	Returns:
 		D: Depth map
 	'''
+	T1 = np.append(T1,np.array([[0,0,0,1]]),0)
+	T2 = np.append(T2,np.array([[0,0,0,1]]),0)
 	rel_T = np.matmul(np.linalg.inv(T1),T2) # Go from frame1 to prev keyframe and then to frame2
+	rel_T = rel_T[:3]
 	E = get_essential_matrix(rel_T)
 	F = np.matmul(camera_matrix_inv.T,np.matmul(E,camera_matrix_inv)) # Fundamental Matrix
 	frame_rect_1,frame_rect_2,rect_rel_T = rectify_frames(frame1,frame2,F,rel_T)

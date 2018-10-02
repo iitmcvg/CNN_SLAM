@@ -40,6 +40,6 @@ def fuse_depth_map(frame,prev_keyframe):
 	Returns:
 		The new keyframe as Keyframe object
 	'''
-	actual_fuse_v = vectorize(actual_fuse)
+	actual_fuse_v = np.vectorize(actual_fuse)
 	frame.D,frame.U = actual_fuse_v(index_matrix,frame,prev_keyframe)
 	return frame.D,frame.U

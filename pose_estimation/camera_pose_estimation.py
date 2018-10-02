@@ -50,13 +50,6 @@ index_matrix = np.dstack(np.meshgrid(np.arange(480),np.arange(640),indexing = 'i
 cam_matrix = np.eye(3,3) # 3x3 Intrinsic camera matrix - converts 3x3 point in camera frame to homogeneous repreentation of an image coordiante
 cam_matrix_inv = np.linalg.inv(cam_matrix)
 
-class Keyframe:
-	def __init__(self, pose, depth, uncertainty, image):
-		self.T = pose # 4x4 transformation matrix # 6 vector
-		self.D = depth
-		self.U = uncertainty
-		self.I = image
-
 def fix_u(u_prop):
 	'''
 	Fixes a pixel location if it is negative or out of bounds
@@ -67,11 +60,11 @@ def fix_u(u_prop):
 	Returns:
 		u_prop: fixed pixel location
 	'''
-	if u_prop[0]>im_size[0]:
-		u_prop = im_size[0] - 1
+	if u_prop[0]>=im_size[0]:
+		u_prop[0] = im_size[0] - 1
 	elif u_prop[0]<0:
 		u_prop[0] = 0
-	if u_prop[1]>im_size[1]:
+	if u_prop[1]>=im_size[1]:
 		u_prop[1] = im_size[1] - 1
 	elif u_prop[1]<0:
 		u_prop[1] = 0
@@ -169,23 +162,6 @@ def get_initial_pose():
 	'''
 	return np.array([[1,0,0,0],[0,1,0,0],[0,0,1,0]])
 
-def get_highgrad_element(img):
-	'''
-	Finds high gradient areas in the image
-
-	Arguments:
-		img: Input image
-
-	Returns:
-		u: Array of pixel locations
-		Shape (X,2)
-		X: number of high grad elements
-	'''
-	threshold = 100
-	laplacian = cv2.Laplacian(img,cv2.CV_8U)
-	ret,thresh = cv2.threshold(laplacian,threshold,255,cv2.THRESH_BINARY)
-	u = cv2.findNonZero(thresh)
-	return np.squeeze(np.array(u))
 
 def calc_photo_residual(i,frame,cur_keyframe,T):
 	'''
@@ -204,7 +180,8 @@ def calc_photo_residual(i,frame,cur_keyframe,T):
 	i = np.append(i,np.ones(1)) 
 	i = i.astype(int)
 	#3D point 3*1
-	V = cur_keyframe.D[i[0]][[1]] * np.matmul(cam_matrix_inv,i) 
+
+	V = cur_keyframe.D[i[0]][i[1]] * np.matmul(cam_matrix_inv,i) 
 
 	#Make V homogeneous 4*1
 	V=np.append(V,1)
@@ -314,6 +291,11 @@ def delr_delD(u,frame,cur_keyframe,T):
 	urx = np.array([u[0] + 1,u[1]])
 	uly = np.array([u[0],u[1] - 1])
 	ury = np.array([u[0],u[1] - 1])
+
+	ulx = fix_u(ulx)
+	uly = fix_u(uly)
+	urx = fix_u(urx)
+	ury = fix_u(ury)
 
 	# Depth map values
 	Dlx = cur_keyframe.D[ulx[0]][ulx[1]]
@@ -597,6 +579,14 @@ def test_get_back_T():
 	T_s = test_get_min_rep()
 	print (T_s,'\n')
 	print("Testing get_back_T",_get_back_T(T_s))
+
+def test_find_epipoles():
+	t_s = np.random.random((6))
+	T = _get_back_T(t_s)
+	E = stereo_match.get_essential_matrix(T)
+	F = np.matmul(camera_matrix_inv.T,np.matmul(E,camera_matrix_inv))
+	e1,e2 = stereo_match.find_epipoles(F)
+	print e1,e2
 
 if __name__=='__main__':
 	test_min_cost_func()
