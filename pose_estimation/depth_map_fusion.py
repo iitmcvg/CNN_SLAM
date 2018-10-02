@@ -4,7 +4,7 @@ import tensorflow as tf
 import sys
 import time
 
-sigma_p = 0 # Some white noise variance thingi
+sigma_p = 0 # Some white noise variance thing
 
 def actual_fuse(u,frame,prev_keyframe):
 	'''

@@ -9,7 +9,6 @@
 # Try increasing search range
 # See SVD and minimizing least squares in Zisserman
 # Do normalized corelation
-# Can do some stuff later like blurring or adge enhancement and all?
 # See graph cuts or DP formulations
 
 # Always index images as x and then y
@@ -23,7 +22,7 @@ from matplotlib import pyplot as plt
 # Put in some doc later
 im_size = (480,640)
 
-camera_matrix = np.eye(3,3)
+camera_matrix = np.eye(3,3) # Read from doc later
 camera_matrix_inv = np.linalg.inv(camera_matrix)
 
 def get_essential_matrix(T):
