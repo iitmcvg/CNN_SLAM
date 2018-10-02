@@ -4,6 +4,8 @@ import tensorflow as tf
 import sys
 import time
 
+sigma_p = 0 # Some white noise variance thingi
+
 def actual_fuse(u,frame,prev_keyframe):
 	'''
 	Does the actual fusion of depth and uncertainty map

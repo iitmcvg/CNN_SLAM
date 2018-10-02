@@ -1,9 +1,10 @@
-# Overflow warnings and other errors while running
+# Singular matrix encountered sometimes
 # See Gauss Newton in Zisserman
 
 # Check later
 # Newton gauss is for least squares; Here we are using for huber norm (also should huber norm be included in the calculation of individual costs)
 # delr/delu = delr/delx + delr/dely - should we divide by 2 or something or find the root of sum of squares
+# initial uncertainty and pose
 
 # To do
 # Dont just cast to int. Interpolate instead. Make sure you are doing inverse warping and not forward
@@ -162,62 +163,13 @@ def _get_back_T(T_fl):
 	T[:,:3] = R
 	return T
 
-def find_uncertainty(u,D,D_prev,T):
-	'''
-	Finds uncertainty for one element of new keyframe
-
-	Arguments:
-		u: Pixel location
-		D: New keyframe's depth map
-		D_prev: Previous keyframe's depth map
-		T: Pose of new keyframe
-
-	Returns: Uncertainty at position u
-	'''
-	u = np.append(u,np.ones(1)) #Convert to homogeneous
-
-	V = D * np.matmul(cam_matrix_inv,u) #World point
-	V = np.append(V,np.ones(1))
-
-	u_prop = np.matmul(cam_matrix,T)
-	u_prop = np.matmul(u_prop,V)
-	u_prop = u_prop/u_prop[2]
-	u_prop = u_prop[:-1]
-
-	U = D[u[0]][u[1]] - D_prev[u_prop[0]][u_prop[1]]
-	return U**2
-
-def get_uncertainty(T,D,prev_keyframe):
-	'''
-	Finds the uncertainty map for a new keyframe
-
-	Arguments:
-		T: Pose of new keyframe
-		D: Depth map of new keyframe
-		prev_keyframe: Previous keyframe of Keyframe class
-
-	Returns:
-		U: Uncertainty map
-	'''
-	# Write vectorize properly
-	T = np.matmul(np.linalg.inv(T),prev_keyframe.T) #Check if this is right
-	find_uncertainty_v = np.vectorize(find_uncertainty)
-	U = find_uncertainty_v(index_matrix,D,prev_keyframe.D,T) #Check
-	return U
-
-def get_initial_uncertainty(): 
-	'''
-	To get uncertainty map for the first frame
-	'''
-	raise NotImplementedError
-
 def get_initial_pose(): 
 	'''
 	Pose for the first frame
 	'''
-	raise NotImplementedError
+	return np.array([[1,0,0,0],[0,1,0,0],[0,0,1,0]])
 
-def get_highgrad_element(img,threshold=100):
+def get_highgrad_element(img):
 	'''
 	Finds high gradient areas in the image
 
@@ -229,7 +181,7 @@ def get_highgrad_element(img,threshold=100):
 		Shape (X,2)
 		X: number of high grad elements
 	'''
-	
+	threshold = 100
 	laplacian = cv2.Laplacian(img,cv2.CV_8U)
 	ret,thresh = cv2.threshold(laplacian,threshold,255,cv2.THRESH_BINARY)
 	u = cv2.findNonZero(thresh)
@@ -271,7 +223,8 @@ def calc_photo_residual(i,frame,cur_keyframe,T):
 
 	#print i,'\n',u_prop
 
-	r = (cur_keyframe.I[i[0]][i[1]] - frame[u_prop[0]][u_prop[1]])
+	r = (int(cur_keyframe.I[i[0],i[1]]) - int(frame[u_prop[0],u_prop[1]]))
+	# print r,'\n',cur_keyframe.I[i[0],i[1]],frame[u_prop[0],u_prop[1]],'\n\n'
 	return r
 
 #Not needed?
@@ -332,7 +285,7 @@ def calc_r_for_delr(u,D,frame,cur_keyframe,T):
 
 	u_prop = fix_u(u_prop)
 
-	r = cur_keyframe.I[u[0],u[1]] - frame[u_prop[0],u_prop[1]]
+	r = int(cur_keyframe.I[u[0],u[1]]) - int(frame[u_prop[0],u_prop[1]])
 	return r
 
 def delr_delD(u,frame,cur_keyframe,T):
@@ -544,6 +497,9 @@ def minimize_cost_func(u,frame, cur_keyframe):
 		Jt = J.transpose() # 6xdof
 		W = get_W(dof,stack_r) # dofxdof - diagonal matrix
 		temp = np.matmul(np.matmul(Jt,W),J) # 6x6
+		if np.linalg.det(temp) == 0:
+			print "Singular matrix encountered"
+			print J
 		hess = np.linalg.inv(temp) # 6x6
 		delT = np.matmul(hess,Jt) # 6xdof
 		delT = np.matmul(delT,W) # 6xdof
@@ -599,7 +555,7 @@ def test_highgrad():
 	dummy_image_grey=np.uint8((dummy_image[:,:,0]+dummy_image[:,:,1]+dummy_image[:,:,2])/3)
 
 	# Test high  grad
-	result=get_highgrad_element(dummy_image_grey,threshold=200)
+	result=get_highgrad_element(dummy_image_grey)
 	print("Testing high grad {} ".format(result))
 
 	assert(result.shape[1]==2)

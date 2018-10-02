@@ -229,7 +229,8 @@ def five_pixel_match(img1,img2):
 	print D
 	cv2.imshow('dawd',D)
 	cv2.waitKey(0)"""
-	D = cv2.GaussianBlur(D,(5,5),0)
+	D = cv2.medianBlur(D,5)
+
 	plt.imshow(D,'gray')
    	plt.show()
 	return D
