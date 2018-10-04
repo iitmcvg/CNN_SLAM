@@ -10,7 +10,15 @@ _Updated: 4th October 2018._
 
 Blog:  [iitmcvg.github.io](http://iitmcvg.github.io/)
 
-This repository contains content that we use for CNN SLAM. Original paper: 
+This repository contains content that we use for CNN SLAM. [Original paper](https://arxiv.org/abs/1704.03489)
+
+---
+
+## Contributors
+
+* [Varun Sundar](github.com/varun19299)
+* Aditya S
+* Aaaryaan
 
 ---
 
