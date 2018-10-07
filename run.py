@@ -7,6 +7,7 @@ import tensorflow as tf
 import sys
 import time
 import argparse
+from matplotlib import pyplot as plt
 
 # Modules
 import pose_estimation.depth_map_fusion as depth_map_fusion
@@ -16,9 +17,11 @@ import pose_estimation.stereo_match as stereo_match
 # import graph_optimization.update_pose_graph as update_pose_graph
 from pose_estimation import monodepth
 
+camera_matrix = np.eye(3,3) # Read from doc later
+camera_matrix_inv = np.linalg.inv(camera_matrix)
 im_size = (480,640)
 sigma_p = 0 # Some white noise variance thing
-index_matrix = np.dstack(np.meshgrid(np.arange(480),np.arange(640),indexing = 'ij'))
+index_matrix = np.reshape(np.dstack(np.meshgrid(np.arange(480),np.arange(640),indexing = 'ij')),(480*640,2))
 
 parser = argparse.ArgumentParser(description='Monodepth TensorFlow implementation.')
 
@@ -243,14 +246,26 @@ def test_without_cnn():
 		print "*****************************"
 		print "Stereo Matching Done"
 		print "*****************************\n"
-		cv2.imshow("awdaw",D_frame)
-		cv2.waitKey(0)
+		plt.imshow(D_frame)
+		plt.show()
+		print "**********************************"
+		print "Going to find uncertainty"
+		print "**********************************"
 		U_frame = find_uncertainty.get_uncertainty(T,D_frame,cur_keyframe)
 		frame_obj = Keyframe(T,D_frame,U_frame,frame) # frame as a keyframe object
 		cur_keyframe.D,cur_keyframe.U = depth_map_fusion.fuse_depth_map(frame_obj,cur_keyframe)
-		
+		print "**********************************"
+		print "Found uncertainty and fused it"
+		print "**********************************"
+
 	cv2.imshow("twrer",K[cur_index].D)
 	cv2.waitKey(0)
+
+
+def test_cam_pose_est():
+	img1 = cv2.resize(cv2.imread("stereo.jpeg",0),(im_size[1],im_size[0]),interpolation = cv2.INTER_CUBIC)
+	img2 = cv2.resize(cv2.imread("stereo(1).jpeg",0),(im_size[1],im_size[0]),interpolation = cv2.INTER_CUBIC)
+	u = get_highgrad_element(frame)
 
 if __name__ == "__main__":
 	test_without_cnn()

@@ -7,7 +7,7 @@
 # initial uncertainty and pose
 
 # To do
-# Dont just cast to int. Interpolate instead. Make sure you are doing inverse warping and not forward
+# Dont just cast to int. Interpolate instead. Make sure you are doing inverse warping and not forward - do everywhere
 # Pixel from keyframe should always be propagated
 # Put hyperparamaters in some doc
 # Change exit criteria
@@ -28,7 +28,8 @@ import argparse
 import math
 
 # Modules
-import depth_map_fusion as depth_map_fusion
+#import depth_map_fusion as depth_map_fusion
+from pose_estimation.stereo_match import *
 #import monodepth
 
 '''
@@ -46,7 +47,7 @@ Variable nomenclature:
 
 im_size = (480,640)
 sigma_p = 5 # Some white noise variance thing
-index_matrix = np.dstack(np.meshgrid(np.arange(480),np.arange(640),indexing = 'ij'))
+index_matrix = np.reshape(np.dstack(np.meshgrid(np.arange(480),np.arange(640),indexing = 'ij')),(480*640,2))
 cam_matrix = np.eye(3,3) # 3x3 Intrinsic camera matrix - converts 3x3 point in camera frame to homogeneous repreentation of an image coordiante
 cam_matrix_inv = np.linalg.inv(cam_matrix)
 
@@ -362,6 +363,9 @@ def huber_norm(x):
 	else:
 		return delta*(abs(x) - (delta/2))
 
+def ratio_residual_uncertainty(u,frame,cur_keyframe,T):
+	return huber_norm(calc_photo_residual(u,frame,cur_keyframe,T)/calc_photo_residual_uncertainty(u,frame,cur_keyframe,T))
+
 def calc_cost(uu,frame,cur_keyframe,T,flag = 1):
 	'''
 	Calculates the residual error as a stack.
@@ -378,7 +382,8 @@ def calc_cost(uu,frame,cur_keyframe,T,flag = 1):
 	# Should we include huber norm also here
 	if flag==0:
 		T = _get_back_T(T)
-	return np.array([huber_norm(calc_photo_residual(u,frame,cur_keyframe,T)/calc_photo_residual_uncertainty(u,frame,cur_keyframe,T)) for u in uu])
+	ratio_residual_uncertainty_v = np.vectorize(ratio_residual_uncertainty,excluded = [1,2,3],signature = '(1)->()')
+	return ratio_residual_uncertainty_v(uu,frame,cur_keyframe,T)
 
 def get_jacobian(dof,u,frame,cur_keyframe,T_s):
 	'''
@@ -586,7 +591,9 @@ def test_find_epipoles():
 	E = stereo_match.get_essential_matrix(T)
 	F = np.matmul(camera_matrix_inv.T,np.matmul(E,camera_matrix_inv))
 	e1,e2 = stereo_match.find_epipoles(F)
-	print e1,e2
+	print F
+	print e1
 
+	
 if __name__=='__main__':
-	test_min_cost_func()
+	test_find_epipoles()

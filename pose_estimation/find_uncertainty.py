@@ -57,7 +57,7 @@ def get_uncertainty(T,D,prev_keyframe):
 	# T = np.matmul(np.linalg.inv(T),prev_keyframe.T) #Check if this is right
 	find_uncertainty_v = np.vectorize(find_uncertainty,signature = '(1)->()',excluded = [1,2,3])
 	U = find_uncertainty_v(index_matrix,D,prev_keyframe.D,T) #Check
-	U = np.reshape(U,(480,640))
+	U = np.reshape(U,im_size)
 	return U
 
 def get_initial_uncertainty(): 
