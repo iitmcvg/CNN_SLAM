@@ -200,28 +200,28 @@ def test_without_cnn():
 
 	# ret,image,frame = get_camera_image() # frame is the numpy array
 
-	print "*****************************"
-	print "Initialised first keyframe"
-	print "*****************************\n"
+	print ("*****************************")
+	print ("Initialised first keyframe")
+	print ("*****************************\n")
 
 	frame = cv2.cvtColor(f,cv2.COLOR_BGR2GRAY)
     # Finds the high gradient pixel locations in the current frame
 	u = get_highgrad_element(frame) 
  
-	print "**********************************************"
-	print "Got high grad elements. Going to estimate pose"
-	print "**********************************************\n"
+	print ("**********************************************")
+	print ("Got high grad elements. Going to estimate pose")
+	print ("**********************************************\n")
 
     # Finds pose of current frame by minimizing photometric residual (wrt prev keyframe)
 	T = camera_pose_estimation.minimize_cost_func(u,frame,cur_keyframe) 
             
-	print "*****************************"
-	print "Estimated Pose"
-	print "*****************************\n"
-	print "T = ", T,'\n'
+	print ("*****************************")
+	print ("Estimated Pose")
+	print ("*****************************\n")
+	print ("T = ", T,'\n')
 
 	if check_keyframe(T):	
-		print "Error: second frame cant be keyframe\n"		
+		print ("Error: second frame cant be keyframe\n")	
 		# If it is a keyframe, add it to K after finding depth and uncertainty map                    
 		depth = monodepth.get_cnn_depth(sess,image)	
 		cur_index += 1
@@ -239,24 +239,24 @@ def test_without_cnn():
 		update_pose_graph.graph_optimization()
 
 	else: # Refine and fuse depth map. Stereo matching consecutive frame
-		print "*****************************"
-		print "Going to do stereo matching"
-		print "*****************************\n"
+		print ("*****************************")
+		print ("Going to do stereo matching")
+		print ("*****************************\n")
 		D_frame = stereo_match.stereo_match(prev_frame,frame,prev_pose,T)
-		print "*****************************"
-		print "Stereo Matching Done"
-		print "*****************************\n"
+		print ("*****************************")
+		print ("Stereo Matching Done")
+		print ("*****************************\n")
 		plt.imshow(D_frame)
 		plt.show()
-		print "**********************************"
-		print "Going to find uncertainty"
-		print "**********************************"
+		print ("**********************************")
+		print ("Going to find uncertainty")
+		print ("**********************************")
 		U_frame = find_uncertainty.get_uncertainty(T,D_frame,cur_keyframe)
 		frame_obj = Keyframe(T,D_frame,U_frame,frame) # frame as a keyframe object
 		cur_keyframe.D,cur_keyframe.U = depth_map_fusion.fuse_depth_map(frame_obj,cur_keyframe)
-		print "**********************************"
-		print "Found uncertainty and fused it"
-		print "**********************************"
+		print ("**********************************")
+		print ("Found uncertainty and fused it")
+		print ("**********************************")
 
 	cv2.imshow("twrer",K[cur_index].D)
 	cv2.waitKey(0)

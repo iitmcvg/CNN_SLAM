@@ -81,7 +81,7 @@ def find_epipoles(F):
 		e2 = e2/e2[2]
 
 	if(np.dot(F[2],e1)>1e-8 or np.dot(F[:,2],e2)>1e-8): # Change later
-		print "Error with finding epipoles"
+		print ("Error with finding epipoles")
 		# Add something here for error handling
 
 	return e1,e2
@@ -170,7 +170,7 @@ def actual_match(vec1,vec2):
 				continue
 			cost = 0
 			for l in range(5):
-				cost = cost + (five_points[l] - vec2[k+2l])**2
+				cost = cost + (five_points[l] - vec2[k+2*l])**2
 			if min_cost == -1:
 				min_cost = cost
 				min_pos = k + 4

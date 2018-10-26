@@ -1,3 +1,5 @@
+# remove keyfram def
+
 # Singular matrix encountered sometimes
 # See Gauss Newton in Zisserman
 
@@ -29,8 +31,15 @@ import math
 
 # Modules
 #import depth_map_fusion as depth_map_fusion
-from pose_estimation.stereo_match import *
+#from pose_estimation.stereo_match import *
 #import monodepth
+
+class Keyframe:
+	def __init__(self, pose, depth, uncertainty, image):
+		self.T = pose # 4x4 transformation matrix # 6 vector
+		self.D = depth
+		self.U = uncertainty
+		self.I = image
 
 '''
 Variable nomenclature:
@@ -485,8 +494,8 @@ def minimize_cost_func(u,frame, cur_keyframe):
 		W = get_W(dof,stack_r) # dofxdof - diagonal matrix
 		temp = np.matmul(np.matmul(Jt,W),J) # 6x6
 		if np.linalg.det(temp) == 0:
-			print "Singular matrix encountered"
-			print J
+			print ("Singular matrix encountered")
+			print (J)
 		hess = np.linalg.inv(temp) # 6x6
 		delT = np.matmul(hess,Jt) # 6xdof
 		delT = np.matmul(delT,W) # 6xdof
@@ -501,6 +510,34 @@ def minimize_cost_func(u,frame, cur_keyframe):
 		T = np.matmul(T_4,delT)[:3] # 3x4
 		T_s = get_min_rep(T) # 6x1
 	return T
+
+def loss_tf(u,frame,cur_keyframe,T_s):
+	T = _get_back_T(T_s)
+	cost = calc_cost(u,frame,cur_keyframe,T)
+	print(T)
+	cost = tf.reduce_sum(cost)
+	return cost
+
+def grad_tf(u,frame,cur_keyframe,T_s):
+	with tf.GradientTape() as tape:
+		lossa = loss_tf(u,frame,cur_keyframe,T_s)
+	print(T_s)
+	print(lossa)
+	grad = tape.gradient(lossa,T_s)
+	print(grad)
+	return grad
+
+def minimize_cost_with_tf(u,frame,cur_keyframe):
+	tf.enable_eager_execution()
+	dof = len(u)
+	T_s = tf.contrib.eager.Variable(np.random.random((6)))
+	optimizer = tf.train.AdamOptimizer(learning_rate = 0.01)
+	i = 0
+	while(loss_tf(u,frame,cur_keyframe,T_s)>0.5): # Change later
+		grads = grad_tf(u,frame,cur_keyframe,T_s)
+		optimizer.apply_gradients(zip(grads,T_s),global_step = tf.train.get_or_create_global_step())
+		i = i+1
+	return _get_back_T(T_s.numpy()),loss_tf(u,frame,cur_keyframe,T_s),i
 
 def check_keyframe(T):
 	'''
@@ -571,7 +608,7 @@ def test_min_cost_func():
 
 	cur_key = Keyframe(dummy_pose,cur_key_depth,cur_key_unc,cur_key_test_im_grey)
 
-	print("Testing minimize cost func",minimize_cost_func(u_test,frame_test,cur_key))
+	print("Testing minimize cost func",minimize_cost_with_tf(u_test,frame_test,cur_key))
 
 def test_get_min_rep():
 	T = np.array([[0.36,0.48,-0.8,5],[-0.8,0.6,0,3],[0.48,0.64,0.60,8]])
@@ -591,9 +628,6 @@ def test_find_epipoles():
 	E = stereo_match.get_essential_matrix(T)
 	F = np.matmul(camera_matrix_inv.T,np.matmul(E,camera_matrix_inv))
 	e1,e2 = stereo_match.find_epipoles(F)
-	print F
-	print e1
-
 	
 if __name__=='__main__':
-	test_find_epipoles()
+	test_min_cost_func()
