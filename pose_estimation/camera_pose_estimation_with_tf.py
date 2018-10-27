@@ -265,13 +265,13 @@ def calc_cost(uu,frame,cur_keyframe,T,flag = 1):
 	return ratio_residual_uncertainty_v(uu,frame,cur_keyframe,T)
 
 def loss_tf(u,frame,cur_keyframe,T_s):
-	T = _get_back_T(T_s.numpy())
+	T = _get_back_T(T_s)
 	cost = calc_cost(u,frame,cur_keyframe,T)
-	cost = tf.reduce_sum(cost)
+	cost = np.sum(cost)
 	return cost#+T_s[0]-T_s[0]
 
 def grad_tf(u,frame,cur_keyframe,T_s):
-	T1 = T_s.numpy()
+	T1 = T_s
 	grad = np.array([1.0,1.0,1.0,1.0,1.0,1.0])
 	for i in range(6):
 		Ta = T1.copy()
@@ -279,8 +279,8 @@ def grad_tf(u,frame,cur_keyframe,T_s):
 		Ta[i] = Ta[i] - x
 		Tb = T1.copy()
 		Tb[i] = Tb[i] + x
-		Ta = tf.contrib.eager.Variable(Ta)
-		Tb = tf.contrib.eager.Variable(Tb)
+		#Ta = tf.contrib.eager.Variable(Ta)
+		#Tb = tf.contrib.eager.Variable(Tb)
 		costa = loss_tf(u,frame,cur_keyframe,Ta)
 		costb = loss_tf(u,frame,cur_keyframe,Tb)
 		grad[i] = (costb - costa)/(2*x)
@@ -290,26 +290,35 @@ def grad_tf(u,frame,cur_keyframe,T_s):
 	#print(T_s)
 	grad = tape.gradient(lossa,T_s)
 	#print(grad)"""
-	grads = tf.contrib.eager.Variable(grad,dtype = tf.float32)
+	#tf.contrib.eager.Variable(grad,dtype = tf.float32)
 	#print(grad)
-	return grads
+	return grad
 
 def minimize_cost_with_tf(u,frame,cur_keyframe):
-	tf.enable_eager_execution()
+	variance = 0.01
+	mean = 5.0
+	learning_rate = 0.05
+	#tf.enable_eager_execution()
 	dof = len(u)
-	T_s = tf.contrib.eager.Variable(np.random.random((6)),dtype = tf.float32)
-	optimizer = tf.train.AdamOptimizer(learning_rate = 0.001)
+	T_s = np.random.random((6)) * variance+ mean
+	#optimizer = tf.train.AdamOptimizer(learning_rate = 0.001)
 	i = 0
-	while(loss_tf(u,frame,cur_keyframe,T_s)>0.1): # Change later
+	while(np.max(loss_tf(u,frame,cur_keyframe,T_s))>0.1): # Change later
 		grads = grad_tf(u,frame,cur_keyframe,T_s)
 		#print("grad = ",grads)
-		optimizer.apply_gradients(zip([grads],[T_s]),global_step = tf.train.get_or_create_global_step())
-		i = i+1
 		print("loss ",loss_tf(u,frame,cur_keyframe,T_s))
-		print("grad: ",tf.reduce_max(grads))
+		#optimizer.apply_gradients(zip([grads],[T_s]),global_step = tf.train.get_or_create_global_step())
+		T_s = T_s - grads*learning_rate
+		i = i+1
+
+		print("grad: ",np.max(grads))
 		print("T_s",T_s)
+		if abs(np.max(grads))>100:
+			break
 		print()
-	return _get_back_T(T_s.numpy()),loss_tf(u,frame,cur_keyframe,T_s),i
+		if i==20:
+			break
+	return _get_back_T(T_s),loss_tf(u,frame,cur_keyframe,T_s),i
 
 def test_min_cost_func():
 	'''
