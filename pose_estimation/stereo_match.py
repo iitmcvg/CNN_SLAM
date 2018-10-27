@@ -1,5 +1,7 @@
+# Error with fnding epipoles
 # See https://docs.opencv.org/2.4/modules/calib3d/doc/camera_calibration_and_3d_reconstruction.html
 # Need camera matrix for depth from disparity
+# Depth from disparity
 
 # Find standard deviation for whole image?
 # Interpolation?
@@ -18,6 +20,7 @@ Small Baseline Stereo Matching
 '''
 import cv2
 import numpy as np
+import time
 from matplotlib import pyplot as plt
 # Put in some doc later
 im_size = (480,640)
@@ -70,13 +73,15 @@ def find_epipoles(F):
 	F.e1 = 0
 	F.transpose.e2 = 0
 	'''
-	e1 = np.cross(F[0],F[1])
-	e1 = e1/e1[2]
-	e2 = np.cross(F[:,0],F[:,1])
-	e2 = e2/e2[2]
+	e1 = np.cross(F[0]+F[1],F[1]+F[2])
+	if e1[2]!=0:
+		e1 = e1/e1[2]
+	e2 = np.cross(F[:,0]+F[:,1],F[:,1]+F[:,2])
+	if e2[2]!=0:
+		e2 = e2/e2[2]
 
-	if(np.dot(F[2],e1)!=0 or np.dot(F[:2].e2)!=0):
-		print "Error with finding epipoles"
+	if(np.dot(F[2],e1)>1e-8 or np.dot(F[:,2],e2)>1e-8): # Change later
+		print ("Error with finding epipoles")
 		# Add something here for error handling
 
 	return e1,e2
@@ -109,6 +114,9 @@ def do_transform(frame,H):
 	'''
 	dst = cv2.warpPerspective(frame,H,im_size)
 	return dst 
+
+def get_rect_pose(T):
+	return T # Change later
 
 def rectify_frames(frame1,frame2,F,rel_T):
 	'''
@@ -144,25 +152,25 @@ def rectify_frames(frame1,frame2,F,rel_T):
 	H1 = np.matmul(Ha,H0)
 	frame1_rect = do_transform(frame1,H1)
 
-	rect_rel_T = get_rect_pose() # Use old baseline only? Its small enough
+	rect_rel_T = get_rect_pose(rel_T) # Use old baseline only? Its small enough
 	return frame1_rect,frame2_rect,rect_rel_T
 
 def actual_match(vec1,vec2):
 	std_dev = int((np.var(vec2))**0.5)
 	D = np.ones(im_size[1])*0.05
-	for j in range(im_size[1] - 4):
+	for j in range(im_size[1] - 8):
 		five_points = np.zeros(5)
 		for k in range(5):
-			five_points[k] = vec1[j+k]
-		
+			five_points[k] = vec1[j+2*k]
 		min_cost = -1
 		min_pos = -1
+		a = time.time()
 		for k in range(j-2*std_dev,j+2*std_dev+1): # Change to 2?
 			if(k<0 or k+10>im_size[1]):
 				continue
 			cost = 0
 			for l in range(5):
-				cost = cost + (five_points[l] - vec2[k+2l])**2
+				cost = cost + (five_points[l] - vec2[k+2*l])**2
 			if min_cost == -1:
 				min_cost = cost
 				min_pos = k + 4
@@ -170,6 +178,8 @@ def actual_match(vec1,vec2):
 				#print cost,min_cost,j,k
 				min_cost = cost
 				min_pos = k + 4
+		b = time.time()
+		#print b-a
 		"""
 		l = 0
 		u = 8
@@ -219,19 +229,18 @@ def five_pixel_match(img1,img2):
 			print i,j,D[i][j+2],'\n'
 		"""
 	actual_match_v = np.vectorize(actual_match,signature = '(1),(1)->(1)')
-	D = actual_match_v(img1,img2)
-	D = D/(255.0)
-	print D
+	D = actual_match_v(img1,img2) #Divide by 255.0?
 	"""D = 1.0/(D + 0.05)
 	print np.amin(D),np.amax(D)
 	D = (D/np.amax(D))*50+0.2
 	print D
 	cv2.imshow('dawd',D)
 	cv2.waitKey(0)"""
-	D = cv2.medianBlur(D,5)
-
-	plt.imshow(D,'gray')
-   	plt.show()
+	#D = cv2.medianBlur(D,5)
+	plt.imshow(D, cmap='jet')
+	plt.show()
+	#cv2.imshow('sfefse',(1.0/D))
+	#cv2.waitKey(0)
 	return D
 
 def depth_from_disparity(disparity_map,T):
@@ -245,7 +254,7 @@ def depth_from_disparity(disparity_map,T):
 	Returns: 
 		depth_map
 	'''
-	return disparity_map/(T[3,0]**2 + T[3,1]**2 + T[3,2]**2)**0.5
+	return 1.0/((disparity_map/(T[0,3]**2 + T[1,3]**2 + T[2,3]**2)**0.5)+0.001)
 
 def stereo_match(frame1,frame2,T1,T2):
 	'''
@@ -260,7 +269,10 @@ def stereo_match(frame1,frame2,T1,T2):
 	Returns:
 		D: Depth map
 	'''
+	T1 = np.append(T1,np.array([[0,0,0,1]]),0)
+	T2 = np.append(T2,np.array([[0,0,0,1]]),0)
 	rel_T = np.matmul(np.linalg.inv(T1),T2) # Go from frame1 to prev keyframe and then to frame2
+	rel_T = rel_T[:3]
 	E = get_essential_matrix(rel_T)
 	F = np.matmul(camera_matrix_inv.T,np.matmul(E,camera_matrix_inv)) # Fundamental Matrix
 	frame_rect_1,frame_rect_2,rect_rel_T = rectify_frames(frame1,frame2,F,rel_T)
@@ -285,7 +297,9 @@ def test_stereo_match():
 	img2 = cv2.resize(cv2.imread("stereo(1).jpeg",0),(im_size[1],im_size[0]),interpolation = cv2.INTER_CUBIC)
 	T1 = np.array([[1,0,0,5],[0,1,0,0],[0,0,1,0]])
 	T2 = np.array([[1,0,0,7],[0,1,0,0],[0,0,1,0]])
-	stereo_match(img1,img2,T1,T2)
+	depth_map = stereo_match(img1,img2,T1,T2)
+	plt.imshow(depth_map,cmap = 'jet')
+	plt.show()
 
 if __name__=='__main__':
-	test_5_match()
+	test_stereo_match()

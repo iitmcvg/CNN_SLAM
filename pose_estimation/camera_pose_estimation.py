@@ -1,3 +1,5 @@
+# remove keyfram def
+
 # Singular matrix encountered sometimes
 # See Gauss Newton in Zisserman
 
@@ -7,7 +9,7 @@
 # initial uncertainty and pose
 
 # To do
-# Dont just cast to int. Interpolate instead. Make sure you are doing inverse warping and not forward
+# Dont just cast to int. Interpolate instead. Make sure you are doing inverse warping and not forward - do everywhere
 # Pixel from keyframe should always be propagated
 # Put hyperparamaters in some doc
 # Change exit criteria
@@ -28,7 +30,8 @@ import argparse
 import math
 
 # Modules
-import depth_map_fusion as depth_map_fusion
+#import depth_map_fusion as depth_map_fusion
+#from pose_estimation.stereo_match import *
 #import monodepth
 
 '''
@@ -46,16 +49,9 @@ Variable nomenclature:
 
 im_size = (480,640)
 sigma_p = 5 # Some white noise variance thing
-index_matrix = np.dstack(np.meshgrid(np.arange(480),np.arange(640),indexing = 'ij'))
+index_matrix = np.reshape(np.dstack(np.meshgrid(np.arange(480),np.arange(640),indexing = 'ij')),(480*640,2))
 cam_matrix = np.eye(3,3) # 3x3 Intrinsic camera matrix - converts 3x3 point in camera frame to homogeneous repreentation of an image coordiante
 cam_matrix_inv = np.linalg.inv(cam_matrix)
-
-class Keyframe:
-	def __init__(self, pose, depth, uncertainty, image):
-		self.T = pose # 4x4 transformation matrix # 6 vector
-		self.D = depth
-		self.U = uncertainty
-		self.I = image
 
 def fix_u(u_prop):
 	'''
@@ -67,11 +63,11 @@ def fix_u(u_prop):
 	Returns:
 		u_prop: fixed pixel location
 	'''
-	if u_prop[0]>im_size[0]:
-		u_prop = im_size[0] - 1
+	if u_prop[0]>=im_size[0]:
+		u_prop[0] = im_size[0] - 1
 	elif u_prop[0]<0:
 		u_prop[0] = 0
-	if u_prop[1]>im_size[1]:
+	if u_prop[1]>=im_size[1]:
 		u_prop[1] = im_size[1] - 1
 	elif u_prop[1]<0:
 		u_prop[1] = 0
@@ -169,23 +165,6 @@ def get_initial_pose():
 	'''
 	return np.array([[1,0,0,0],[0,1,0,0],[0,0,1,0]])
 
-def get_highgrad_element(img):
-	'''
-	Finds high gradient areas in the image
-
-	Arguments:
-		img: Input image
-
-	Returns:
-		u: Array of pixel locations
-		Shape (X,2)
-		X: number of high grad elements
-	'''
-	threshold = 100
-	laplacian = cv2.Laplacian(img,cv2.CV_8U)
-	ret,thresh = cv2.threshold(laplacian,threshold,255,cv2.THRESH_BINARY)
-	u = cv2.findNonZero(thresh)
-	return np.squeeze(np.array(u))
 
 def calc_photo_residual(i,frame,cur_keyframe,T):
 	'''
@@ -204,7 +183,8 @@ def calc_photo_residual(i,frame,cur_keyframe,T):
 	i = np.append(i,np.ones(1)) 
 	i = i.astype(int)
 	#3D point 3*1
-	V = cur_keyframe.D[i[0]][[1]] * np.matmul(cam_matrix_inv,i) 
+
+	V = cur_keyframe.D[i[0]][i[1]] * np.matmul(cam_matrix_inv,i) 
 
 	#Make V homogeneous 4*1
 	V=np.append(V,1)
@@ -315,6 +295,11 @@ def delr_delD(u,frame,cur_keyframe,T):
 	uly = np.array([u[0],u[1] - 1])
 	ury = np.array([u[0],u[1] - 1])
 
+	ulx = fix_u(ulx)
+	uly = fix_u(uly)
+	urx = fix_u(urx)
+	ury = fix_u(ury)
+
 	# Depth map values
 	Dlx = cur_keyframe.D[ulx[0]][ulx[1]]
 	Drx = cur_keyframe.D[urx[0]][urx[1]]
@@ -380,6 +365,9 @@ def huber_norm(x):
 	else:
 		return delta*(abs(x) - (delta/2))
 
+def ratio_residual_uncertainty(u,frame,cur_keyframe,T):
+	return huber_norm(calc_photo_residual(u,frame,cur_keyframe,T)/calc_photo_residual_uncertainty(u,frame,cur_keyframe,T))
+
 def calc_cost(uu,frame,cur_keyframe,T,flag = 1):
 	'''
 	Calculates the residual error as a stack.
@@ -396,7 +384,8 @@ def calc_cost(uu,frame,cur_keyframe,T,flag = 1):
 	# Should we include huber norm also here
 	if flag==0:
 		T = _get_back_T(T)
-	return np.array([huber_norm(calc_photo_residual(u,frame,cur_keyframe,T)/calc_photo_residual_uncertainty(u,frame,cur_keyframe,T)) for u in uu])
+	ratio_residual_uncertainty_v = np.vectorize(ratio_residual_uncertainty,excluded = [1,2,3],signature = '(1)->()')
+	return ratio_residual_uncertainty_v(uu,frame,cur_keyframe,T)
 
 def get_jacobian(dof,u,frame,cur_keyframe,T_s):
 	'''
@@ -498,8 +487,8 @@ def minimize_cost_func(u,frame, cur_keyframe):
 		W = get_W(dof,stack_r) # dofxdof - diagonal matrix
 		temp = np.matmul(np.matmul(Jt,W),J) # 6x6
 		if np.linalg.det(temp) == 0:
-			print "Singular matrix encountered"
-			print J
+			print ("Singular matrix encountered")
+			print (J)
 		hess = np.linalg.inv(temp) # 6x6
 		delT = np.matmul(hess,Jt) # 6xdof
 		delT = np.matmul(delT,W) # 6xdof
@@ -514,6 +503,34 @@ def minimize_cost_func(u,frame, cur_keyframe):
 		T = np.matmul(T_4,delT)[:3] # 3x4
 		T_s = get_min_rep(T) # 6x1
 	return T
+
+def loss_tf(u,frame,cur_keyframe,T_s):
+	T = _get_back_T(T_s)
+	cost = calc_cost(u,frame,cur_keyframe,T)
+	print(T)
+	cost = tf.reduce_sum(cost)
+	return cost
+
+def grad_tf(u,frame,cur_keyframe,T_s):
+	with tf.GradientTape() as tape:
+		lossa = loss_tf(u,frame,cur_keyframe,T_s)
+	print(T_s)
+	print(lossa)
+	grad = tape.gradient(lossa,T_s)
+	print(grad)
+	return grad
+
+def minimize_cost_with_tf(u,frame,cur_keyframe):
+	tf.enable_eager_execution()
+	dof = len(u)
+	T_s = tf.contrib.eager.Variable(np.random.random((6)))
+	optimizer = tf.train.AdamOptimizer(learning_rate = 0.01)
+	i = 0
+	while(loss_tf(u,frame,cur_keyframe,T_s)>0.5): # Change later
+		grads = grad_tf(u,frame,cur_keyframe,T_s)
+		optimizer.apply_gradients(zip(grads,T_s),global_step = tf.train.get_or_create_global_step())
+		i = i+1
+	return _get_back_T(T_s.numpy()),loss_tf(u,frame,cur_keyframe,T_s),i
 
 def check_keyframe(T):
 	'''
@@ -584,7 +601,7 @@ def test_min_cost_func():
 
 	cur_key = Keyframe(dummy_pose,cur_key_depth,cur_key_unc,cur_key_test_im_grey)
 
-	print("Testing minimize cost func",minimize_cost_func(u_test,frame_test,cur_key))
+	print("Testing minimize cost func",minimize_cost_with_tf(u_test,frame_test,cur_key))
 
 def test_get_min_rep():
 	T = np.array([[0.36,0.48,-0.8,5],[-0.8,0.6,0,3],[0.48,0.64,0.60,8]])
@@ -598,5 +615,12 @@ def test_get_back_T():
 	print (T_s,'\n')
 	print("Testing get_back_T",_get_back_T(T_s))
 
+def test_find_epipoles():
+	t_s = np.random.random((6))
+	T = _get_back_T(t_s)
+	E = stereo_match.get_essential_matrix(T)
+	F = np.matmul(camera_matrix_inv.T,np.matmul(E,camera_matrix_inv))
+	e1,e2 = stereo_match.find_epipoles(F)
+	
 if __name__=='__main__':
 	test_min_cost_func()

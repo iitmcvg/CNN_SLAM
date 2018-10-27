@@ -6,7 +6,13 @@ import time
 import argparse
 import math
 
+from pose_estimation.camera_pose_estimation import fix_u
+
 sigma_p = 0 # White noise variance
+im_size = (480,640)
+index_matrix = np.reshape(np.dstack(np.meshgrid(np.arange(480),np.arange(640),indexing = 'ij')),(480*640,2))
+cam_matrix = np.eye(3,3) # 3x3 Intrinsic camera matrix - converts 3x3 point in camera frame to homogeneous repreentation of an image coordiante
+cam_matrix_inv = np.linalg.inv(cam_matrix)
 
 def find_uncertainty(u,D,D_prev,T):
 	'''
@@ -21,15 +27,17 @@ def find_uncertainty(u,D,D_prev,T):
 	Returns: Uncertainty at position u
 	'''
 	u = np.append(u,np.ones(1)) # Convert to homogeneous
+	u = u.astype(np.int32)
 
-	V = D * np.matmul(cam_matrix_inv,u) # World point
+	V = D[u[0],u[1]] * np.matmul(cam_matrix_inv,u) # World point
 	V = np.append(V,np.ones(1))
 
 	u_prop = np.matmul(cam_matrix,T)
 	u_prop = np.matmul(u_prop,V)
 	u_prop = u_prop/u_prop[2]
 	u_prop = u_prop[:-1]
-
+	u_prop = u_prop.astype(np.int32)
+	u_prop = fix_u(u_prop)
 	U = D[u[0]][u[1]] - D_prev[u_prop[0]][u_prop[1]]
 	return U**2
 
@@ -47,8 +55,9 @@ def get_uncertainty(T,D,prev_keyframe):
 	'''
 	# Write vectorize properly
 	# T = np.matmul(np.linalg.inv(T),prev_keyframe.T) #Check if this is right
-	find_uncertainty_v = np.vectorize(find_uncertainty)
+	find_uncertainty_v = np.vectorize(find_uncertainty,signature = '(1)->()',excluded = [1,2,3])
 	U = find_uncertainty_v(index_matrix,D,prev_keyframe.D,T) #Check
+	U = np.reshape(U,im_size)
 	return U
 
 def get_initial_uncertainty(): 

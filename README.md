@@ -1,20 +1,43 @@
 # README
 
+_Updated: 4th October 2018._
+
 *Computer Vision and Intelligence Group, IIT Madras*
 
-<img src=/avatar.png width=500 height=300></img>
+<img src=/avatar.png width=400 height=200></img>
+
 ---
+
 Blog:  [iitmcvg.github.io](http://iitmcvg.github.io/)
 
-This repository contains content that we use for SLAM.
+This repository contains content that we use for CNN SLAM. [Original paper](https://arxiv.org/abs/1704.03489)
+
+---
+
+## Contributors
+
+* [Varun Sundar](github.com/varun19299)
+* Aditya S
+* Aaaryaan
+
+---
+
+## Experiments
+
+1. Heterogenous graphs; convert every CPU op into a compute graph and note performance with placement.
+2. Stereo matching methods and GPU optimisation.
+3. CPU efficient object detectors and depth estimators.
+4. Indoor optimised depth estimation (monocular.)
 
 ---
 
 ## To Do
 
-* [ ] Complete camera pose estimation.
+* [x] Complete camera pose estimation.
 * [ ] Monocular depth methods library.
 * [ ] Freeze graphs for inference. 
+* [ ] Sample runs.
+* [ ] Global Graph Optimisation.
 
 ---
 
