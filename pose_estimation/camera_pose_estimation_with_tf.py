@@ -68,7 +68,7 @@ def _get_back_T(T_fl):
 	'''
 	#print "The flattened pose input is ",T_fl,'\n\n\n'
 	T = np.ones((3,4))
-	T[:,3] = T_fl[:3]
+	T[:,3] = T_fl[:3] # 4th column of T = first 3 elements of T_fl
 	R = eulerAnglesToRotationMatrix(T_fl[3:6])
 	T[:,:3] = R
 	return T
@@ -275,7 +275,7 @@ def grad_tf(u,frame,cur_keyframe,T_s):
 	grad = np.array([1.0,1.0,1.0,1.0,1.0,1.0])
 	for i in range(6):
 		Ta = T1.copy()
-		x = Ta[i]/10.0
+		x = Ta[i]/100.0
 		Ta[i] = Ta[i] - x
 		Tb = T1.copy()
 		Tb[i] = Tb[i] + x
@@ -298,14 +298,17 @@ def minimize_cost_with_tf(u,frame,cur_keyframe):
 	tf.enable_eager_execution()
 	dof = len(u)
 	T_s = tf.contrib.eager.Variable(np.random.random((6)),dtype = tf.float32)
-	optimizer = tf.train.AdamOptimizer(learning_rate = 0.1)
+	optimizer = tf.train.AdamOptimizer(learning_rate = 0.001)
 	i = 0
 	while(loss_tf(u,frame,cur_keyframe,T_s)>0.1): # Change later
 		grads = grad_tf(u,frame,cur_keyframe,T_s)
 		#print("grad = ",grads)
 		optimizer.apply_gradients(zip([grads],[T_s]),global_step = tf.train.get_or_create_global_step())
 		i = i+1
-		print(grads)
+		print("loss ",loss_tf(u,frame,cur_keyframe,T_s))
+		print("grad: ",tf.reduce_max(grads))
+		print("T_s",T_s)
+		print()
 	return _get_back_T(T_s.numpy()),loss_tf(u,frame,cur_keyframe,T_s),i
 
 def test_min_cost_func():

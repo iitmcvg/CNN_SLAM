@@ -34,13 +34,6 @@ import math
 #from pose_estimation.stereo_match import *
 #import monodepth
 
-class Keyframe:
-	def __init__(self, pose, depth, uncertainty, image):
-		self.T = pose # 4x4 transformation matrix # 6 vector
-		self.D = depth
-		self.U = uncertainty
-		self.I = image
-
 '''
 Variable nomenclature:
 
