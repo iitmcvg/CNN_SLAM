@@ -1,3 +1,13 @@
+import monodepth.average_gradients as average_gradients
+import monodepth.monodepth_dataloader as monodepth_dataloader
+import monodepth.monodepth_model as monodepth_model
+import scipy.misc
+import tensorflow.contrib.slim as slim
+import tensorflow as tf
+import time
+import re
+import argparse
+import numpy as np
 '''
 Extract monodepth prediction for a given frame
 
@@ -7,35 +17,24 @@ from __future__ import absolute_import, division, print_function
 
 # only keep warnings and errors
 import os
-os.environ['TF_CPP_MIN_LOG_LEVEL']='0'
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '0'
 
-import numpy as np
-import argparse
-
-import re
-import time
-import tensorflow as tf
-import tensorflow.contrib.slim as slim
-import scipy.misc
-
-import monodepth.monodepth_model as monodepth_model
-import monodepth.monodepth_dataloader as monodepth_dataloader
-import monodepth.average_gradients as average_gradients
 
 def _post_process_disparity(disp):
-    ''' 
+    '''
     Post processing.
 
     not intended to be used outside module.
     '''
     _, h, w = disp.shape
-    l_disp = disp[0,:,:]
-    r_disp = np.fliplr(disp[1,:,:])
+    l_disp = disp[0, :, :]
+    r_disp = np.fliplr(disp[1, :, :])
     m_disp = 0.5 * (l_disp + r_disp)
     l, _ = np.meshgrid(np.linspace(0, 1, w), np.linspace(0, 1, h))
     l_mask = 1.0 - np.clip(20 * (l - 0.05), 0, 1)
     r_mask = np.fliplr(l_mask)
     return r_mask * l_disp + l_mask * r_disp + (1.0 - l_mask - r_mask) * m_disp
+
 
 def init_monodepth(checkpoint_path):
     '''
@@ -62,21 +61,22 @@ def init_monodepth(checkpoint_path):
 
     return sess
 
-def get_depth_map(sess,image_array,encoder="resnet50"):
+
+def get_depth_map(sess, image_array, encoder="resnet50"):
     '''
     Returns monocular depth map
 
     Args:
     * image_array: input image array
     * checkpoint path: Path to restore from
-    * encoder: 
+    * encoder:
 
 
     TODO:
     * Use frozen graphs instead
     * Switch to tf.data.Datasets
     '''
-    input_height,input_width=image_array.shape()[:2]
+    input_height, input_width = image_array.shape()[:2]
     params = monodepth_parameters(
         encoder=encoder,
         height=input_height,
@@ -92,7 +92,7 @@ def get_depth_map(sess,image_array,encoder="resnet50"):
         lr_loss_weight=0,
         full_summary=False)
 
-    left  = tf.placeholder(tf.float32, [2, input_height, input_width, 3])
+    left = tf.placeholder(tf.float32, [2, input_height, input_width, 3])
     model = MonodepthModel(params, "test", left, None)
 
     input_image = image_array
@@ -103,6 +103,8 @@ def get_depth_map(sess,image_array,encoder="resnet50"):
     disp = sess.run(model.disp_left_est[0], feed_dict={left: input_images})
     disp_pp = _post_process_disparity(disp.squeeze()).astype(np.float32)
 
-    disp_to_img = scipy.misc.imresize(disp_pp.squeeze(), [original_height, original_width])
+    disp_to_img = scipy.misc.imresize(
+        disp_pp.squeeze(), [
+            original_height, original_width])
 
     return disp_to_img
