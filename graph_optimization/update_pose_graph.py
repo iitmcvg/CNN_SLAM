@@ -7,6 +7,7 @@ import time
 import argparse
 
 def update_pose_graph():
-
+    None
 
 def graph_optimization():
+    None
