@@ -11,3 +11,5 @@
 *.pyc
 
 # Directories
+checkpoints/*
+dummy_images/*

@@ -1,32 +1,31 @@
-import monodepth.average_gradients as average_gradients
-import monodepth.monodepth_dataloader as monodepth_dataloader
-import monodepth.monodepth_model as monodepth_model
+# Library imports
 import scipy.misc
 import tensorflow.contrib.slim as slim
 import tensorflow as tf
-import time
-import re
-import argparse
 import numpy as np
+
+# Module imports
+import monodepth.average_gradients as average_gradients
+import monodepth.monodepth_dataloader as monodepth_dataloader
+import monodepth.monodepth_model as monodepth_model
 '''
 Extract monodepth prediction for a given frame
 
 '''
-
-from __future__ import absolute_import, division, print_function
 
 # only keep warnings and errors
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '0'
 
 
-def _post_process_disparity(disp):
+def post_process_disparity(disp):
     '''
     Post processing.
 
     not intended to be used outside module.
     '''
-    _, h, w = disp.shape
+
+    _,h, w = disp.shape
     l_disp = disp[0, :, :]
     r_disp = np.fliplr(disp[1, :, :])
     m_disp = 0.5 * (l_disp + r_disp)
@@ -36,15 +35,16 @@ def _post_process_disparity(disp):
     return r_mask * l_disp + l_mask * r_disp + (1.0 - l_mask - r_mask) * m_disp
 
 
-def init_monodepth(checkpoint_path):
+def init_monodepth(checkpoint_path, sess = None):
     '''
     Intialises a monodepth session.
 
     Returns session.
     '''
     # SESSION
-    config = tf.ConfigProto(allow_soft_placement=True)
-    sess = tf.Session(config=config)
+    if not sess:
+        config = tf.ConfigProto(allow_soft_placement=True)
+        sess = tf.Session(config=config)
 
     # SAVER
     train_saver = tf.train.Saver()
@@ -52,8 +52,9 @@ def init_monodepth(checkpoint_path):
     # INIT
     sess.run(tf.global_variables_initializer())
     sess.run(tf.local_variables_initializer())
-    coordinator = tf.train.Coordinator()
-    threads = tf.train.start_queue_runners(sess=sess, coord=coordinator)
+
+    # coordinator = tf.train.Coordinator()
+    # threads = tf.train.start_queue_runners(sess=sess, coord=coordinator)
 
     # RESTORE
     restore_path = checkpoint_path.split(".")[0]
@@ -77,7 +78,7 @@ def get_depth_map(sess, image_array, encoder="resnet50"):
     * Switch to tf.data.Datasets
     '''
     input_height, input_width = image_array.shape()[:2]
-    params = monodepth_parameters(
+    params = monodepth_model.monodepth_parameters(
         encoder=encoder,
         height=input_height,
         width=input_width,
@@ -93,7 +94,7 @@ def get_depth_map(sess, image_array, encoder="resnet50"):
         full_summary=False)
 
     left = tf.placeholder(tf.float32, [2, input_height, input_width, 3])
-    model = MonodepthModel(params, "test", left, None)
+    model = monodepth_model.MonodepthModel(params, "test", left, None)
 
     input_image = image_array
     original_height, original_width, num_channels = input_image.shape
@@ -101,7 +102,7 @@ def get_depth_map(sess, image_array, encoder="resnet50"):
     input_images = np.stack((input_image, np.fliplr(input_image)), 0)
 
     disp = sess.run(model.disp_left_est[0], feed_dict={left: input_images})
-    disp_pp = _post_process_disparity(disp.squeeze()).astype(np.float32)
+    disp_pp = post_process_disparity(disp.squeeze()).astype(np.float32)
 
     disp_to_img = scipy.misc.imresize(
         disp_pp.squeeze(), [

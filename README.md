@@ -22,6 +22,14 @@ This repository contains content that we use for CNN SLAM. [Original paper](http
 
 ---
 
+## Table of Contents
+
+1. [Download Monodepth Checkpoints](g3docs/download_monodepth.md)
+2. [Using Monodepth Infer](g3docs/using_monodepth_infer.md)
+3. [Install g2o](g3docs/install_g2o.md)
+
+---
+
 ## Experiments
 
 1. Heterogenous graphs; convert every CPU op into a compute graph and note performance with placement.

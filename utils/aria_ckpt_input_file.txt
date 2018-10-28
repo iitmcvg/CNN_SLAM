@@ -1,0 +1,5 @@
+http://visual.cs.ucl.ac.uk/pubs/monoDepth/models/model_kitti_resnet.zip
+http://visual.cs.ucl.ac.uk/pubs/monoDepth/models/model_eigen_resnet.zip
+http://visual.cs.ucl.ac.uk/pubs/monoDepth/models/model_cityscapes_resnet.zip
+http://visual.cs.ucl.ac.uk/pubs/monoDepth/models/model_city2kitti_resnet.zip
+http://visual.cs.ucl.ac.uk/pubs/monoDepth/models/model_city2eigen_resnet.zip
