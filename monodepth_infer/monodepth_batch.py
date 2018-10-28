@@ -74,11 +74,12 @@ def save(d, e):
     disp = cv2.resize(d, (h, w)) 
     
     name = e.split("/")[-1]
-    name_path = os.path.join(path_depth, name)
-    plt.imsave(name_path, disp, cmap='plasma')
+    name = name.split(".")[0]
+    name_path = os.path.join(path_depth, name + ".png")
+    plt.imsave(name_path, disp, cmap='gray')
 
 # Get rgb images
-dataset = tf.data.Dataset.list_files(args.path+"/rgb/*"+ args.image_format)
+dataset = tf.data.Dataset.list_files(args.path+"/rgb/*")
 dataset = dataset.map(_parse_fn)
 dataset = dataset.batch(batch_size)
 dataset = dataset.make_one_shot_iterator()
