@@ -10,8 +10,18 @@ Runs with a batch size of 1 (cant go higher), on a directory:
 
 Directory must have structure:
 ```
-
+dummy_data
+├── depth
+│   ├── Atlanta_Zoo_Panda.jpg
+│   ├── Atlanta_Zoo_Panda.png
+│   ├── Atlanta_Zoo_Panda_copy.jpg
+│   └── Atlanta_Zoo_Panda_copy.png
+└── rgb
+    ├── Atlanta_Zoo_Panda.png
+    └── Atlanta_Zoo_Panda_copy.png
 ```
+
+Given rgb, depth is produced.
 
 Run as: (from `monodepth_infer`)
 
