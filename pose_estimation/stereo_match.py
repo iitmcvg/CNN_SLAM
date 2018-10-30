@@ -293,7 +293,9 @@ def stereo_match(frame1, frame2, T1, T2):
         E, camera_matrix_inv))  # Fundamental Matrix
     frame_rect_1, frame_rect_2, rect_rel_T = rectify_frames(
         frame1, frame2, F, rel_T)
-    disparity_map = five_pixel_match(frame1, frame2)  # Disparity map
+    #disparity_map = five_pixel_match(frame1, frame2)  # Disparity map
+    stereo = cv2.StereoBM_create(numDisparities=16, blockSize=7)
+    disparity_map = stereo.compute(frame_rect_1,frame_rect_2)
     depth_map = depth_from_disparity(disparity_map, rect_rel_T)
     return depth_map
 
@@ -324,26 +326,40 @@ def test_5_match():
 
 
 def test_stereo_match():
-    img1 = cv2.resize(
+	print(time.time())
+	img1 = cv2.resize(cv2.imread("pose_estimation/stereo.jpeg",0),(im_size[1], im_size[0]),interpolation=cv2.INTER_CUBIC)
+	img2 = cv2.resize(cv2.imread("pose_estimation/stereo(1).jpeg",0),(im_size[1],im_size[0]),interpolation=cv2.INTER_CUBIC)
+	T1 = np.array([[1, 0, 0, 5], [0, 1, 0, 0], [0, 0, 1, 0]])
+	T2 = np.array([[1, 0, 0, 7], [0, 1, 0, 0], [0, 0, 1, 0]])
+	depth_map = stereo_match(img1, img2, T1, T2)
+	print(time.time())
+	plt.imshow(depth_map, cmap='gray')
+	plt.show()
+	return 1
+
+
+if __name__ == '__main__':
+    test_stereo_match()
+    """img1 = cv2.resize(
         cv2.imread(
-            "stereo.jpeg",
+            "pose_estimation/stereo.jpeg",
             0),
         (im_size[1],
          im_size[0]),
         interpolation=cv2.INTER_CUBIC)
     img2 = cv2.resize(
         cv2.imread(
-            "stereo(1).jpeg",
+            "pose_estimation/stereo(1).jpeg",
             0),
         (im_size[1],
          im_size[0]),
-        interpolation=cv2.INTER_CUBIC)
-    T1 = np.array([[1, 0, 0, 5], [0, 1, 0, 0], [0, 0, 1, 0]])
-    T2 = np.array([[1, 0, 0, 7], [0, 1, 0, 0], [0, 0, 1, 0]])
-    depth_map = stereo_match(img1, img2, T1, T2)
-    plt.imshow(depth_map, cmap='jet')
+        interpolation=cv2.INTER_CUBIC) 
+    print(time.time())""
+    stereo = cv2.StereoBM_create(numDisparities=16, blockSize=7)
+    disparity = stereo.compute(img1,img2)
+    disparity = cv2.GaussianBlur(disparity,(5,5),0)
+    print(time.time())
+    plt.imshow(disparity,'gray')
     plt.show()
-
-
-if __name__ == '__main__':
-    test_stereo_match()
+    #cv2.imshow('eesfse',disparity)
+    #cv2.waitKey(0)"""
