@@ -9,12 +9,58 @@ import math
 
 from pose_estimation.config import *
 
-class Keyframe:
-    def __init__(self, pose, depth, uncertainty, image):
-        self.T = pose  # 4x4 transformation matrix # 6 vector
-        self.D = depth
-        self.U = uncertainty
-        self.I = image
+def isRotationMatrix(R):
+    '''
+    Checks if a matrix is a valid rotation matrix.
+    '''
+    Rt = np.transpose(R)
+    shouldBeIdentity = np.dot(Rt, R)
+    I = np.identity(3, dtype=R.dtype)
+    n = np.linalg.norm(I - shouldBeIdentity)
+    return n < 1e-6
+
+
+def extract_angles(R):
+    '''
+    Extract rotation angles
+
+    Returns: aplha, beta, gamma (as np array)
+    '''
+
+    assert(isRotationMatrix(R))  # Throws error if false
+
+    sy = math.sqrt(R[0, 0] * R[0, 0] + R[1, 0] * R[1, 0])
+
+    singular = sy < 1e-6
+
+    if not singular:
+        x = math.atan2(R[2, 1], R[2, 2])
+        y = math.atan2(-R[2, 0], sy)
+        z = math.atan2(R[1, 0], R[0, 0])
+    else:
+        x = math.atan2(-R[1, 2], R[1, 1])
+        y = math.atan2(-R[2, 0], sy)
+        z = 0
+
+    return np.array([x, y, z])
+
+def get_min_rep(T):
+    '''
+    Convert 3*4 matrix into 6*1 vector
+
+    [x y z alpha beta gamma]
+
+    '''
+    t = T[:, 3]
+    x, y, z = t
+
+    angles = extract_angles(T[:, :3])
+
+    T_vect = np.zeros(6)
+    T_vect[:3] = t
+    T_vect[3:6] = angles
+    return T_vect
+
 
 
 def eulerAnglesToRotationMatrix(theta):

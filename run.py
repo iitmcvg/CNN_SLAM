@@ -35,11 +35,13 @@ args = parser.parse_args()
 cam = cv2.VideoCapture(0)
 
 class Keyframe:
-	def __init__(self, pose, depth, uncertainty, image):
-		self.T = pose # 4x4 transformation matrix # 6 vector
+	def __init__(self, pose, depth, uncertainty, frame, image,covariance):
+		self.T = pose # 4x4 transformation matrix from previous keyframe
 		self.D = depth
 		self.U = uncertainty
-		self.I = image
+		self.F = frame # grayscale image
+		self.I = image # RGB image
+		self.C = covariance # Covariance of pose # 6x6
 
 def get_camera_image():
 	'''
@@ -119,9 +121,9 @@ def main():
 
     # Initalisation
 	ini_uncertainty = find_uncertainty.get_initial_uncertainty()
-	ini_pose = camera_pose_estimation.get_initial_pose()
+	ini_pose,ini_covariance = camera_pose_estimation.get_initial_pose()
 
-	K.append(Keyframe(ini_pose,ini_depth,ini_uncertainty,frame)) 
+	K.append(Keyframe(ini_pose,ini_depth,ini_uncertainty,frame,image,ini_covariance)) 
 	cur_keyframe = K[0]
 	cur_index = 0
 	prev_frame = cur_keyframe.I
@@ -137,19 +139,19 @@ def main():
 		u = get_highgrad_element(frame) 
 
         # Finds pose of current frame by minimizing photometric residual (wrt prev keyframe)
-		T = camera_pose_estimation.minimize_cost_func(u,frame,cur_keyframe) 
+		T,C = camera_pose_estimation.minimize_cost_func(u,frame,cur_keyframe) 
             
 		if check_keyframe(T):			
 			# If it is a keyframe, add it to K after finding depth and uncertainty map                    
 			depth = monodepth.get_cnn_depth(sess,image)	
 			cur_index += 1
 			uncertainty = find_uncertainty.get_uncertainty(T,D,K[cur_index - 1])
-			T = np.append(T,np.array([[0,0,0,1]]),0)
-			cur_keyframe.T = np.append(cur_keyframe.T,np.array([[0,0,0,1]]),0)
-			T_abs = np.matmul(T,cur_keyframe.T) # absolute pose of the new keyframe
-			T = T[:3]
-			cur_keyframe.T = cur_keyframe.T[:3]
-			K.append(Keyframe(T_abs,depth,uncertainty,frame))
+			# T = np.append(T,np.array([[0,0,0,1]]),0)
+			# cur_keyframe.T = np.append(cur_keyframe.T,np.array([[0,0,0,1]]),0)
+			# T_abs = np.matmul(T,cur_keyframe.T) # absolute pose of the new keyframe
+			# T = T[:3]
+			# cur_keyframe.T = cur_keyframe.T[:3]
+			K.append(Keyframe(T,depth,uncertainty,frame,image,C))
 			K[cur_index].D,K[cur_index].U = depth_map_fusion.fuse_depth_map(K[cur_index],K[cur_index - 1])
 			cur_keyframe = K[cur_index]
 

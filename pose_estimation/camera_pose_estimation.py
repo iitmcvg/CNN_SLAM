@@ -1,3 +1,5 @@
+# Change grad and find covariance
+
 # Library imports
 import numpy as np
 import cv2
@@ -183,12 +185,22 @@ def calc_cost(uu, frame, cur_keyframe, T):
     
     return ratio_residual_uncertainty_v(uu, frame, cur_keyframe, T)
 
+def loss_fn_for_jack(uu, frame, cur_keyframe, T_s):
+    T = get_back_T(T_s)
+    cost = calc_cost(uu, frame, cur_keyframe, T)
+    return cost 
 
 def loss_fn(uu, frame, cur_keyframe, T_s):
     T = get_back_T(T_s)
     cost = calc_cost(uu, frame, cur_keyframe, T)
     cost = np.sum(cost)
     return cost 
+
+def find_covariance_matrix(u, frame, cur_keyframe, T_s,frac = 0.01):
+    costa = loss_fn_for_jack(u, frame, cur_keyframe, T_s * (1 - frac))
+    costb = loss_fn_for_jack(u, frame, cur_keyframe, T_s * (1 + frac))
+    J = 
+
 
 def grad_fn(u, frame, cur_keyframe, T_s, frac = 0.01):
     '''
