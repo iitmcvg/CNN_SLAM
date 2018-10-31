@@ -155,8 +155,8 @@ def main():
 			K[cur_index].D,K[cur_index].U = depth_map_fusion.fuse_depth_map(K[cur_index],K[cur_index - 1])
 			cur_keyframe = K[cur_index]
 
-			update_pose_graph.update_pose_graph()
-			update_pose_graph.graph_optimization()
+			point_cloud = graph_optimization.pose_graph_optimization(K)
+			# Visualise point cloud
 
 		else: # Refine and fuse depth map. Stereo matching consecutive frame
 			D_frame = stereo_match.stereo_match(prev_frame,frame,prev_pose,T)
@@ -164,6 +164,8 @@ def main():
 			frame_obj = Keyframe(T,D_frame,U_frame,frame) # frame as a keyframe object
 			cur_keyframe.D,cur_keyframe.U = depth_map_fusion.fuse_depth_map(frame_obj,cur_keyframe)
 		
+			# Generate and visualise point cloud?
+
 		_delay()
 		prev_frame = frame
 		prev_pose = T
