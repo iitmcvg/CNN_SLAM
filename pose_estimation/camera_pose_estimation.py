@@ -9,6 +9,7 @@ import sys
 import time
 import argparse
 import math
+from multiprocessing import Pool
 
 # Module imports
 from keyframe_utils import *
@@ -16,7 +17,7 @@ from pose_estimation.config import *
 import pose_estimation.optimiser as optimiser
 import pose_estimation.depth_map_fusion as depth_map_fusion
 from pose_estimation.stereo_match import *
-import monodepth_infer.monodepth_single as monodepth
+#import monodepth_infer.monodepth_single as monodepth
 
 def get_initial_pose():
     '''
@@ -179,8 +180,16 @@ def ratio_residual_uncertainty(u, frame, cur_keyframe, T):
     return huber_norm(calc_photo_residual(u, frame, cur_keyframe, T) /
                       calc_photo_residual_uncertainty(u, frame, cur_keyframe, T))
 
+def calc_cost_parallel(uu,frame,cur_keyframe,T):
+    pool = Pool(processes = 2)
+    processes = []
+    for i in uu:
+        processes.append([i,frame,cur_keyframe,T])
+    out = pool.starmap(ratio_residual_uncertainty,processes)
+    return out
+
 # WHAT IS FLAG?
-def calc_cost(uu, frame, cur_keyframe, T):
+def calc_cost(uu, frame, cur_keyframe, T,flag = 0):
     '''
     Calculates the residual error as a stack.
 
@@ -189,21 +198,26 @@ def calc_cost(uu, frame, cur_keyframe, T):
             frame: Numpy array o the current frame
             cur_keyframe: Previous keyframe as a Keyframe class
             pose: Current estimated Pose
+            flag = 1 if you wanna do in parallel
 
     Returns:
             r: Residual error as an array
     '''
-    
+    if flag == 1:
+        return calc_cost_parallel(uu,frame,cur_keyframe,T)
+    print("No\n\n")
     return ratio_residual_uncertainty_v(uu, frame, cur_keyframe, T)
+
+
 
 def loss_fn_for_jack(uu, frame, cur_keyframe, T_s):
     T = get_back_T(T_s)
-    cost = calc_cost(uu, frame, cur_keyframe, T)
-    return cost 
+    cost = calc_cost(uu, frame, cur_keyframe, T,1)
+    return np.array(cost) 
 
 def loss_fn(uu, frame, cur_keyframe, T_s):
     T = get_back_T(T_s)
-    cost = calc_cost(uu, frame, cur_keyframe, T)
+    cost = calc_cost(uu, frame, cur_keyframe, T,1)
     cost = np.sum(cost)
     return cost 
 
@@ -228,17 +242,18 @@ def find_covariance_matrix(u, frame, cur_keyframe, T_s,frac = 0.01):
     Find 6x6 covariance matrix by inverse of hessian
     '''
     J = np.zeros((len(u),6))
-    frac = np.zeros(6)
+    fract = np.zeros(6)
     for i in range(6):
         fract[i] = frac
         costa = loss_fn_for_jack(u, frame, cur_keyframe, T_s * (1 - fract)) # Stacked residual error
         costb = loss_fn_for_jack(u, frame, cur_keyframe, T_s * (1 + fract)) 
-        J[:i] = (costb - costa) / (2*T_s[i]*frac)
+        J[:,i] = (costb - costa) / (2*T_s[i]*frac)
     # We have J(dofx6)
     W = get_W(len(u),loss_fn_for_jack(u,frame,cur_keyframe,T_s)) # dof x dof
     H = np.matmul(np.matmul(J.T,W),J) # 6x6
     if np.linalg.det(H)==0:
         print("Zero det encountered\n\n")
+        return np.linalg.pinv(H)
         # Put error handling
     C = np.linalg.inv(H)
     return C # Estimate of covariance
@@ -290,6 +305,7 @@ def minimize_cost_func(u, frame, cur_keyframe,
         # Stopping condtions
         if (loss < loss_bound) or (i == max_iter) or (abs(np.max(grads)) > 100):
             break
+    print(loss_fn(u, frame, cur_keyframe, T_s))
     C = find_covariance_matrix(u,frame,cur_keyframe,T_s)
     return get_back_T(T_s), C,loss_fn(u, frame, cur_keyframe, T_s)
 

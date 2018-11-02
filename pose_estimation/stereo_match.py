@@ -210,6 +210,7 @@ def five_pixel_match(img1, img2):
     '''
     Computes the disparity map for two parallel plane images img1 and img2
     '''
+    
     D = np.zeros(im_size)  # Initilize with some white noise variance?
     return 1
 
@@ -239,22 +240,24 @@ def stereo_match(frame1, frame2, T1, T2):
 
     Returns:
             D: Depth map
-    '''
-    T1 = np.append(T1, np.array([[0, 0, 0, 1]]), 0)
-    T2 = np.append(T2, np.array([[0, 0, 0, 1]]), 0)
+	'''
+	T1 = np.append(T1, np.array([[0, 0, 0, 1]]), 0)
+	T2 = np.append(T2, np.array([[0, 0, 0, 1]]), 0)
     # Go from frame1 to prev keyframe and then to frame2
-    rel_T = np.matmul(np.linalg.inv(T1), T2)
-    rel_T = rel_T[:3]
-    E = get_essential_matrix(rel_T)
-    F = np.matmul(camera_matrix_inv.T, np.matmul(
-        E, camera_matrix_inv))  # Fundamental Matrix
-    frame_rect_1, frame_rect_2, rect_rel_T = rectify_frames(
-        frame1, frame2, F, rel_T)
-    disparity_map = five_pixel_match(frame1, frame2)  # Disparity map
-    stereo = cv2.StereoBM_create(numDisparities=16, blockSize=7)
-    #disparity_map = stereo.compute(frame_rect_1,frame_rect_2)
-    depth_map = depth_from_disparity(disparity_map, rect_rel_T)
-    return depth_map
+	rel_T = np.matmul(np.linalg.inv(T1), T2)
+	rel_T = rel_T[:3]
+	E = get_essential_matrix(rel_T)
+	F = np.matmul(camera_matrix_inv.T, np.matmul(E, camera_matrix_inv))  # Fundamental Matrix
+	frame_rect_1, frame_rect_2, rect_rel_T = rectify_frames(frame1, frame2, F, rel_T)
+	frame_rect_1 = frame_rect_1.astype(np.uint8)
+    frame_rect_2 = frame_rect_2.astype(np.uint8)
+	print(frame_rect_1.dtype)
+	return frame1
+	#disparity_map = five_pixel_match(frame1, frame2)  # Disparity map
+	stereo = cv2.StereoBM_create(numDisparities=16, blockSize=7)
+	disparity_map = stereo.compute(frame_rect_1,frame_rect_2)
+	depth_map = depth_from_disparity(disparity_map, rect_rel_T)
+	return depth_map
 
 
 def test_5_match():

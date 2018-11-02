@@ -1,5 +1,7 @@
 # Check all incomplete functions - go through all and see
 # Parallelize all for loops
+# Normalize depth map****
+# Pack better while parallelizing
 
 # Libraries
 import numpy as np 

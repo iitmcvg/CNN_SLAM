@@ -7,7 +7,7 @@ import argparse
 import math
 
 from pose_estimation.camera_pose_estimation import fix_u
-from params import im_size,camera_matrix as cam_matrix,camera_matrix_inv as cam_matrix_inv,sigma_p
+from params import im_size,camera_matrix as cam_matrix,camera_matrix_inv as cam_matrix_inv,sigma_p,index_matrix
 
 def find_uncertainty(u, D, D_prev, T):
     '''
