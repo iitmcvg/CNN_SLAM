@@ -21,13 +21,10 @@ Small Baseline Stereo Matching
 import cv2
 import numpy as np
 import time
+from multiprocessing import Pool
+
 from matplotlib import pyplot as plt
-# Put in some doc later
-im_size = (480, 640)
-
-camera_matrix = np.eye(3, 3)  # Read from doc later
-camera_matrix_inv = np.linalg.inv(camera_matrix)
-
+from params import im_size,camera_matrix,camera_matrix_inv
 
 def get_essential_matrix(T):
     '''
@@ -42,32 +39,32 @@ def get_essential_matrix(T):
 
 """
 def find_epipolar_lines(u,E):
-	'''
-	Finds epipolar lines Line1 and Line2 in cur_keyframe and frame respectively
+    '''
+    Finds epipolar lines Line1 and Line2 in cur_keyframe and frame respectively
 
-	Arguments:
-		u: Point in cur_keyframe
-		E: Essential matrix to go from cur_keyframe to frame
+    Arguments:
+        u: Point in cur_keyframe
+        E: Essential matrix to go from cur_keyframe to frame
 
-	Returns:
-		line1,line2: The epipolar lines
-	'''
-	# Find line 2 in frame
-	u = np.append(u,(1)) # Make u homogeneous
-	v = np.matmul(camera_matrix_inv,u) # Point in world coordinates
-	l = np.matmul(E,v) # Line in world coords (or something like that)
-	l = np.matmul(camera_matrix_inv,l) # Epipolar line
-	line2 = l[:2]/l[2] # Line as (a,b). So ax' + by' + 1 = 0
+    Returns:
+        line1,line2: The epipolar lines
+    '''
+    # Find line 2 in frame
+    u = np.append(u,(1)) # Make u homogeneous
+    v = np.matmul(camera_matrix_inv,u) # Point in world coordinates
+    l = np.matmul(E,v) # Line in world coords (or something like that)
+    l = np.matmul(camera_matrix_inv,l) # Epipolar line
+    line2 = l[:2]/l[2] # Line as (a,b). So ax' + by' + 1 = 0
 
-	#Finding line 1 in cur_keyframe
-	E_inv = np.linalg.inv(E)
-	u2 = (0,(-1/line2[1]))
-	v = np.matmul(camera_matrix_inv,u) # Point in world coordinates
-	l = np.matmul(E_inv,v) # Line in world coords (or something like that)
-	l = np.matmul(camera_matrix_inv,l) # Epipolar line
-	line1 = l[:2]/l[2]
+    #Finding line 1 in cur_keyframe
+    E_inv = np.linalg.inv(E)
+    u2 = (0,(-1/line2[1]))
+    v = np.matmul(camera_matrix_inv,u) # Point in world coordinates
+    l = np.matmul(E_inv,v) # Line in world coords (or something like that)
+    l = np.matmul(camera_matrix_inv,l) # Epipolar line
+    line1 = l[:2]/l[2]
 
-	return line1,line2
+    return line1,line2
 """
 
 
@@ -191,20 +188,21 @@ def actual_match(vec1, vec2):
         b = time.time()
         # print b-a
         """
-		l = 0
-		u = 8
-		if j-2*std_dev>0:
-			l = j-2*std_dev
-		else :
-			l = 0
-		if j+2*std_dev+1+5>im_size[1]: #Check
-			u = im_size[1]
-		else:
-			u = j+2*std_dev+1
-		vec = np.flip(vec2,axis = 0) # change search range
-		corr = np.correlate(five_points,vec)
-		min_pos = np.argmax(corr)+2"""
+        l = 0
+        u = 8
+        if j-2*std_dev>0:
+            l = j-2*std_dev
+        else:
+            l = 0
+        if j+2*std_dev+1+5>im_size[1]: #Check
+            u = im_size[1]
+        else:
+            u = j+2*std_dev+1
+        vec = np.flip(vec2,axis = 0) # change search range
+        corr = np.correlate(five_points,vec)
+        min_pos = np.argmax(corr)+2"""
         D[j + 2] = np.abs(min_pos - j)  # Add im_size(0) also? (and take abs)?
+    print(time.time())
     return D
 
 
@@ -212,48 +210,9 @@ def five_pixel_match(img1, img2):
     '''
     Computes the disparity map for two parallel plane images img1 and img2
     '''
+    
     D = np.zeros(im_size)  # Initilize with some white noise variance?
-    """
-	std_dev = int((np.var(img2))**0.5) # Standard Deviation
-	for i in range(im_size[0]):
-		for j in range(im_size[1] - 8):
-			five_points = np.zeros(5)
-			for k in range(5):
-				five_points[k] = img1[i][j+2*k]
-			min_cost = -1
-			min_pos = -1
-			for k in range(j-2*std_dev,j+2*std_dev+1):
-				if(k<0 or k+10>im_size[1]):
-					continue
-				cost = 0
-				for l in range(5):
-					cost = cost + (five_points[l] - img2[i][k+2l])**2
-				if min_cost == -1:
-					min_cost = cost
-					min_pos = k + 4
-				if cost<min_cost:
-					#print cost,min_cost,j,k
-					min_cost = cost
-					min_pos = k + 4
-			D[i][j+2] = (min_pos + im_size[1] - j)*(255/850.0)*(2/3.0) # Do we need im_size
-			#print i,D[i][j+2],j+2 - min_pos,'\n'
-			print i,j,D[i][j+2],'\n'
-		"""
-    actual_match_v = np.vectorize(actual_match, signature='(1),(1)->(1)')
-    D = actual_match_v(img1, img2)  # Divide by 255.0?
-    """D = 1.0/(D + 0.05)
-	print np.amin(D),np.amax(D)
-	D = (D/np.amax(D))*50+0.2
-	print D
-	cv2.imshow('dawd',D)
-	cv2.waitKey(0)"""
-    #D = cv2.medianBlur(D,5)
-    plt.imshow(D, cmap='jet')
-    plt.show()
-    # cv2.imshow('sfefse',(1.0/D))
-    # cv2.waitKey(0)
-    return D
-
+    return 1
 
 def depth_from_disparity(disparity_map, T):
     '''
@@ -268,7 +227,6 @@ def depth_from_disparity(disparity_map, T):
     '''
     return 1.0 / \
         ((disparity_map / (T[0, 3]**2 + T[1, 3]**2 + T[2, 3]**2)**0.5) + 0.001)
-
 
 def stereo_match(frame1, frame2, T1, T2):
     '''
@@ -289,11 +247,15 @@ def stereo_match(frame1, frame2, T1, T2):
     rel_T = np.matmul(np.linalg.inv(T1), T2)
     rel_T = rel_T[:3]
     E = get_essential_matrix(rel_T)
-    F = np.matmul(camera_matrix_inv.T, np.matmul(
-        E, camera_matrix_inv))  # Fundamental Matrix
-    frame_rect_1, frame_rect_2, rect_rel_T = rectify_frames(
-        frame1, frame2, F, rel_T)
-    disparity_map = five_pixel_match(frame1, frame2)  # Disparity map
+    F = np.matmul(camera_matrix_inv.T, np.matmul(E, camera_matrix_inv))  # Fundamental Matrix
+    frame_rect_1, frame_rect_2, rect_rel_T = rectify_frames(frame1, frame2, F, rel_T)
+    frame_rect_1 = frame_rect_1.astype(np.uint8)
+    frame_rect_2 = frame_rect_2.astype(np.uint8)
+    print(frame_rect_1.dtype)
+    return frame1
+    #disparity_map = five_pixel_match(frame1, frame2)  # Disparity map
+    stereo = cv2.StereoBM_create(numDisparities=16, blockSize=7)
+    disparity_map = stereo.compute(frame_rect_1,frame_rect_2)
     depth_map = depth_from_disparity(disparity_map, rect_rel_T)
     return depth_map
 
@@ -318,32 +280,46 @@ def test_5_match():
     D = np.zeros(im_size)
     D_1 = five_pixel_match(img1, img2)
     """stereo = cv2.StereoBM_create(numDisparities=16, blockSize=15)
-	disparity = stereo.compute(img1,img2)
-	cv2.imshow('dawwd',disparity)
-	cv2.waitKey(0)"""
+    disparity = stereo.compute(img1,img2)
+    cv2.imshow('dawwd',disparity)
+    cv2.waitKey(0)"""
 
 
 def test_stereo_match():
-    img1 = cv2.resize(
+    print(time.time())
+    img1 = cv2.resize(cv2.imread("pose_estimation/stereo.jpeg",0),(im_size[1], im_size[0]),interpolation=cv2.INTER_CUBIC)
+    img2 = cv2.resize(cv2.imread("pose_estimation/stereo(1).jpeg",0),(im_size[1],im_size[0]),interpolation=cv2.INTER_CUBIC)
+    T1 = np.array([[1, 0, 0, 5], [0, 1, 0, 0], [0, 0, 1, 0]])
+    T2 = np.array([[1, 0, 0, 7], [0, 1, 0, 0], [0, 0, 1, 0]])
+    depth_map = stereo_match(img1, img2, T1, T2)
+    print(time.time())
+    plt.imshow(depth_map, cmap='gray')
+    plt.show()
+    return 1
+
+
+if __name__ == '__main__':
+    test_stereo_match()
+    """img1 = cv2.resize(
         cv2.imread(
-            "stereo.jpeg",
+            "pose_estimation/stereo.jpeg",
             0),
         (im_size[1],
          im_size[0]),
         interpolation=cv2.INTER_CUBIC)
     img2 = cv2.resize(
         cv2.imread(
-            "stereo(1).jpeg",
+            "pose_estimation/stereo(1).jpeg",
             0),
         (im_size[1],
          im_size[0]),
-        interpolation=cv2.INTER_CUBIC)
-    T1 = np.array([[1, 0, 0, 5], [0, 1, 0, 0], [0, 0, 1, 0]])
-    T2 = np.array([[1, 0, 0, 7], [0, 1, 0, 0], [0, 0, 1, 0]])
-    depth_map = stereo_match(img1, img2, T1, T2)
-    plt.imshow(depth_map, cmap='jet')
+        interpolation=cv2.INTER_CUBIC) 
+    print(time.time())""
+    stereo = cv2.StereoBM_create(numDisparities=16, blockSize=7)
+    disparity = stereo.compute(img1,img2)
+    disparity = cv2.GaussianBlur(disparity,(5,5),0)
+    print(time.time())
+    plt.imshow(disparity,'gray')
     plt.show()
-
-
-if __name__ == '__main__':
-    test_stereo_match()
+    #cv2.imshow('eesfse',disparity)
+    #cv2.waitKey(0)"""
