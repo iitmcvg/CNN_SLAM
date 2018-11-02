@@ -13,11 +13,11 @@ import argparse
 from matplotlib import pyplot as plt
 
 # Modules
-"""import pose_estimation.depth_map_fusion as depth_map_fusion
+import pose_estimation.depth_map_fusion as depth_map_fusion
 import pose_estimation.stereo_match as stereo_match
 from params import *
 import pose_estimation.camera_pose_estimation as camera_pose_estimation
-import pose_estimation.find_uncertainty as find_uncertainty"""
+import pose_estimation.find_uncertainty as find_uncertainty
 from keyframe_utils import Keyframe as Keyframe
 import monodepth_infer.monodepth_single as monodepth_single
 
@@ -205,7 +205,7 @@ def test_without_cnn():
 	print ("**********************************************\n")
 
     # Finds pose of current frame by minimizing photometric residual (wrt prev keyframe)
-	T,C,_ = camera_pose_estimation.minimize_cost_func(u,frame,cur_keyframe) 
+	T,C,_ = ini_pose,ini_C,3#camera_pose_estimation.minimize_cost_func(u,frame,cur_keyframe) 
             
 	print ("*****************************")
 	print ("Estimated Pose")
@@ -260,4 +260,4 @@ def test_cam_pose_est():
 	u = get_highgrad_element(frame)
 
 if __name__ == "__main__":
-	main()
+	test_without_cnn()

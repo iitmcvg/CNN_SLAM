@@ -51,6 +51,8 @@ def get_uncertainty(T, D, prev_keyframe):
     '''
     # Write vectorize properly
     # T = np.matmul(np.linalg.inv(T),prev_keyframe.T) #Check if this is right
+    a = find_uncertainty((5,5),D,prev_keyframe.D,T)
+    print("\n\nadwadwa\n\n")
     find_uncertainty_v = np.vectorize(
         find_uncertainty,
         signature='(1)->()',
@@ -58,6 +60,7 @@ def get_uncertainty(T, D, prev_keyframe):
             1,
             2,
             3])
+    U = np.zeros(im_size)
     U = find_uncertainty_v(index_matrix, D, prev_keyframe.D, T)  # Check
     U = np.reshape(U, im_size)
     return U

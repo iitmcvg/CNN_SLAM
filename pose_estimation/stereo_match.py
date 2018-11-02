@@ -252,7 +252,6 @@ def stereo_match(frame1, frame2, T1, T2):
     frame_rect_1 = frame_rect_1.astype(np.uint8)
     frame_rect_2 = frame_rect_2.astype(np.uint8)
     print(frame_rect_1.dtype)
-    return frame1
     #disparity_map = five_pixel_match(frame1, frame2)  # Disparity map
     stereo = cv2.StereoBM_create(numDisparities=16, blockSize=7)
     disparity_map = stereo.compute(frame_rect_1,frame_rect_2)
@@ -293,8 +292,8 @@ def test_stereo_match():
     T2 = np.array([[1, 0, 0, 7], [0, 1, 0, 0], [0, 0, 1, 0]])
     depth_map = stereo_match(img1, img2, T1, T2)
     print(time.time())
-    plt.imshow(depth_map, cmap='gray')
-    plt.show()
+    #plt.imshow(depth_map, cmap='gray')
+    #plt.show()
     return 1
 
 
