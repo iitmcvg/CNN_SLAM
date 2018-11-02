@@ -19,7 +19,7 @@ from params import *
 import pose_estimation.camera_pose_estimation as camera_pose_estimation
 import pose_estimation.find_uncertainty as find_uncertainty"""
 from keyframe_utils import Keyframe as Keyframe
-import monodepth_infer.monodepth_single as monodepth
+import monodepth_infer.monodepth_single as monodepth_single
 
 parser = argparse.ArgumentParser(description='Monodepth TensorFlow implementation.')
 parser.add_argument('--mono_checkpoint_path', default = "checkpoints/model_kitti_resnet/model_kitti_resnet.data" ,type=str,   help='path to a specific checkpoint to load')
@@ -84,8 +84,8 @@ def _exit_program():
 	raise NotImplementedError
 
 def main():
-	# INIT monodepth session
-	sess=monodepth.init_monodepth(args.mono_checkpoint_path)
+	# INIT monodepth_single session
+	sess=monodepth_single.init_monodepth(args.mono_checkpoint_path)
 
 	# INIT camera matrix
 	cam_matrix = get_camera_matrix()
@@ -103,7 +103,7 @@ def main():
 
 	# Predict depth
 	image = cv2.imread("pose_estimation/stereo.jpeg")
-	ini_depth = monodepth.get_cnn_depth(sess,image)
+	ini_depth = monodepth_single.get_depth_map(sess,image)
 	cv2.imshow('dawd',ini_depth)
 	cv2.waitKey(0)
 
@@ -131,7 +131,7 @@ def main():
             
 		if check_keyframe(T):			
 			# If it is a keyframe, add it to K after finding depth and uncertainty map                    
-			depth = monodepth.get_cnn_depth(sess,image)	
+			depth = monodepth_single.get_depth_map(sess,image)	
 			cur_index += 1
 			uncertainty = find_uncertainty.get_uncertainty(T,D,K[cur_index - 1])
 			# T = np.append(T,np.array([[0,0,0,1]]),0)
@@ -215,7 +215,7 @@ def test_without_cnn():
 	if check_keyframe(T):	
 		print ("Error: second frame cant be keyframe\n")	
 		# If it is a keyframe, add it to K after finding depth and uncertainty map                    
-		depth = monodepth.get_cnn_depth(sess,image)	
+		depth = monodepth_single.get_cnn_depth(sess,image)	
 		cur_index += 1
 		uncertainty = find_uncertainty.get_uncertainty(T,D,K[cur_index - 1])
 		T = np.append(T,np.array([[0,0,0,1]]),0)
