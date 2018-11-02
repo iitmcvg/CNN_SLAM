@@ -1,4 +1,5 @@
-# Check all incomplete functions
+# Check all incomplete functions - go through all and see
+# Parallelize all for loops
 
 # Libraries
 import numpy as np 
@@ -11,37 +12,22 @@ from matplotlib import pyplot as plt
 
 # Modules
 import pose_estimation.depth_map_fusion as depth_map_fusion
+import pose_estimation.stereo_match as stereo_match
+from params import *
 import pose_estimation.camera_pose_estimation as camera_pose_estimation
 import pose_estimation.find_uncertainty as find_uncertainty
-import pose_estimation.stereo_match as stereo_match
-# import graph_optimization.update_pose_graph as update_pose_graph
-from pose_estimation import monodepth
+from keyframe_utils import Keyframe as Keyframe
 
-camera_matrix = np.eye(3,3) # Read from doc later
-camera_matrix_inv = np.linalg.inv(camera_matrix)
-im_size = (480,640)
-sigma_p = 0 # Some white noise variance thing
-index_matrix = np.reshape(np.dstack(np.meshgrid(np.arange(480),np.arange(640),indexing = 'ij')),(480*640,2))
-
+"""
 parser = argparse.ArgumentParser(description='Monodepth TensorFlow implementation.')
-
 parser.add_argument('--mono_checkpoint_path',  type=str,   help='path to a specific checkpoint to load',required=True)
 parser.add_argument('--input_height',     type=int,   help='input height', default=480)
 parser.add_argument('--input_width',      type=int,   help='input width', default=640)
-
 args = parser.parse_args()
+"""
 
 # Video cam
 cam = cv2.VideoCapture(0)
-
-class Keyframe:
-	def __init__(self, pose, depth, uncertainty, frame, image,covariance):
-		self.T = pose # 4x4 transformation matrix from previous keyframe
-		self.D = depth
-		self.U = uncertainty
-		self.F = frame # grayscale image
-		self.I = image # RGB image
-		self.C = covariance # Covariance of pose # 6x6
 
 def get_camera_image():
 	'''
@@ -80,9 +66,8 @@ def get_highgrad_element(img):
 		Shape (X,2)
 		X: number of high grad elements
 	'''
-	threshold = 100
 	laplacian = cv2.Laplacian(img,cv2.CV_8U)
-	ret,thresh = cv2.threshold(laplacian,threshold,255,cv2.THRESH_BINARY)
+	ret,thresh = cv2.threshold(laplacian,threshold_for_high_grad,255,cv2.THRESH_BINARY)
 	u = cv2.findNonZero(thresh) # Returns in (x,y) format. Need to exchange
 	u = np.squeeze(np.array(u))
 	temp = np.copy(u[:,0])
@@ -122,7 +107,7 @@ def main():
     # Initalisation
 	ini_uncertainty = find_uncertainty.get_initial_uncertainty()
 	ini_pose,ini_covariance = camera_pose_estimation.get_initial_pose()
-
+	ini_covariance = camera_pose_estimation.get_initial_covariance()
 	K.append(Keyframe(ini_pose,ini_depth,ini_uncertainty,frame,image,ini_covariance)) 
 	cur_keyframe = K[0]
 	cur_index = 0
@@ -139,7 +124,7 @@ def main():
 		u = get_highgrad_element(frame) 
 
         # Finds pose of current frame by minimizing photometric residual (wrt prev keyframe)
-		T,C = camera_pose_estimation.minimize_cost_func(u,frame,cur_keyframe) 
+		T,C,_ = camera_pose_estimation.minimize_cost_func(u,frame,cur_keyframe) 
             
 		if check_keyframe(T):			
 			# If it is a keyframe, add it to K after finding depth and uncertainty map                    
@@ -195,8 +180,8 @@ def test_without_cnn():
     # Initalisation
 	ini_uncertainty = find_uncertainty.get_initial_uncertainty()
 	ini_pose = camera_pose_estimation.get_initial_pose()
-
-	K.append(Keyframe(ini_pose,ini_depth,ini_uncertainty,frame)) 
+	ini_C = camera_pose_estimation.get_initial_covariance()
+	K.append(Keyframe(ini_pose,ini_depth,ini_uncertainty,frame,image,ini_C)) 
 	cur_keyframe = K[0]
 	cur_index = 0
 	prev_frame = cur_keyframe.I
@@ -217,7 +202,7 @@ def test_without_cnn():
 	print ("**********************************************\n")
 
     # Finds pose of current frame by minimizing photometric residual (wrt prev keyframe)
-	T = camera_pose_estimation.minimize_cost_func(u,frame,cur_keyframe) 
+	T,C,_ = camera_pose_estimation.minimize_cost_func(u,frame,cur_keyframe) 
             
 	print ("*****************************")
 	print ("Estimated Pose")

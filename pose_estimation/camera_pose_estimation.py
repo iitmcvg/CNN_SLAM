@@ -1,4 +1,6 @@
+# Put initial guess of pose as the previous frame's pose
 # Change grad and find covariance
+# Parallelize, dont vectorize
 
 # Library imports
 import numpy as np
@@ -9,13 +11,22 @@ import argparse
 import math
 
 # Module imports
-from pose_estimation.keyframe_utils import *
+from keyframe_utils import *
 from pose_estimation.config import *
 import pose_estimation.optimiser as optimiser
-
 import pose_estimation.depth_map_fusion as depth_map_fusion
 from pose_estimation.stereo_match import *
-import monodepth_infer.monodepth as monodepth
+import monodepth_infer.monodepth_single as monodepth
+
+def get_initial_pose():
+    '''
+    Pose for the first frame
+    '''
+    return np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0]])
+
+# Change later
+def get_initial_covariance():
+    return np.eye(6)
 
 def calc_photo_residual(i, frame, cur_keyframe, T):
     '''
@@ -52,7 +63,7 @@ def calc_photo_residual(i, frame, cur_keyframe, T):
 
     u_prop = fix_u(u_prop)
 
-    r = (int(cur_keyframe.I[i[0], i[1]]) - int(frame[u_prop[0], u_prop[1]]))
+    r = (int(cur_keyframe.F[i[0], i[1]]) - int(frame[u_prop[0], u_prop[1]]))
     return r
 
 
@@ -79,7 +90,7 @@ def calc_r_for_delr(u, D, frame, cur_keyframe, T):
 
     u_prop = fix_u(u_prop)
 
-    r = int(cur_keyframe.I[u[0], u[1]]) - int(frame[u_prop[0], u_prop[1]])
+    r = int(cur_keyframe.F[u[0], u[1]]) - int(frame[u_prop[0], u_prop[1]])
     return r
 
 def delr_delD(u, frame, cur_keyframe, T):
@@ -196,21 +207,55 @@ def loss_fn(uu, frame, cur_keyframe, T_s):
     cost = np.sum(cost)
     return cost 
 
-def find_covariance_matrix(u, frame, cur_keyframe, T_s,frac = 0.01):
-    costa = loss_fn_for_jack(u, frame, cur_keyframe, T_s * (1 - frac))
-    costb = loss_fn_for_jack(u, frame, cur_keyframe, T_s * (1 + frac))
-    J = 
+def get_W(dof, stack_r):
+    '''
+    Returns the weight matrix for weighted Gauss-Newton Optimization
 
+    Arguments:
+            dof: Number of high gradient elements we are using
+            stack_r: The stacked residual error as a numpy array (of length dof)
+
+    Returns:
+            W: Weight Matrix
+    '''
+    W = np.zeros((dof, dof))
+    for i in range(dof):
+        W[i][i] = (dof + 1) / (dof + stack_r[i]**2)
+    return W
+
+def find_covariance_matrix(u, frame, cur_keyframe, T_s,frac = 0.01):
+    '''
+    Find 6x6 covariance matrix by inverse of hessian
+    '''
+    J = np.zeros((len(u),6))
+    frac = np.zeros(6)
+    for i in range(6):
+        fract[i] = frac
+        costa = loss_fn_for_jack(u, frame, cur_keyframe, T_s * (1 - fract)) # Stacked residual error
+        costb = loss_fn_for_jack(u, frame, cur_keyframe, T_s * (1 + fract)) 
+        J[:i] = (costb - costa) / (2*T_s[i]*frac)
+    # We have J(dofx6)
+    W = get_W(len(u),loss_fn_for_jack(u,frame,cur_keyframe,T_s)) # dof x dof
+    H = np.matmul(np.matmul(J.T,W),J) # 6x6
+    if np.linalg.det(H)==0:
+        print("Zero det encountered\n\n")
+        # Put error handling
+    C = np.linalg.inv(H)
+    return C # Estimate of covariance
 
 def grad_fn(u, frame, cur_keyframe, T_s, frac = 0.01):
     '''
     Calculate gradients
-    '''    
-    costa = loss_fn(u, frame, cur_keyframe, T_s * (1 - frac))
-    costb = loss_fn(u, frame, cur_keyframe, T_s * (1 + frac))
-    grad = (costb - costa) / (2 * T_s * frac)
-
-    return grad
+    '''
+    grad = np.zeros(6)
+    fract = np.zeros(6)
+    for i in range(6):
+        fract[i] = frac
+        costa = loss_fn(u, frame, cur_keyframe, T_s * (1 - fract))
+        costb = loss_fn(u, frame, cur_keyframe, T_s * (1 + fract))
+        grad[i] = (costb - costa) / (2*T_s[i]*frac)
+        fract[i] = 0
+    return grad # 6x1 gradient
 
 # Vectorised implementations
 ratio_residual_uncertainty_v = np.vectorize(
@@ -218,7 +263,7 @@ ratio_residual_uncertainty_v = np.vectorize(
             1, 2, 3], signature='(1)->()')
 
 
-def minimize_cost(u, frame, cur_keyframe, 
+def minimize_cost_func(u, frame, cur_keyframe, 
     variance = 0.01,
     mean = 5.0,
     learning_rate = 0.05,
@@ -233,10 +278,9 @@ def minimize_cost(u, frame, cur_keyframe,
 
     while True:  # Change later
         loss = loss_fn(u, frame, cur_keyframe, T_s)
-        grads = grad_fn(u, frame, cur_keyframe, T_s)
-
         print("loss ", loss)
-
+        grads = grad_fn(u, frame, cur_keyframe, T_s)
+        print("got grad")
         T_s = optim.get_update([T_s],[grads])[0]
         i = i + 1
 
@@ -246,8 +290,8 @@ def minimize_cost(u, frame, cur_keyframe,
         # Stopping condtions
         if (loss < loss_bound) or (i == max_iter) or (abs(np.max(grads)) > 100):
             break
-
-    return get_back_T(T_s), loss_fn(u, frame, cur_keyframe, T_s)
+    C = find_covariance_matrix(u,frame,cur_keyframe,T_s)
+    return get_back_T(T_s), C,loss_fn(u, frame, cur_keyframe, T_s)
 
 def test_min_cost_func():
     '''
@@ -280,7 +324,7 @@ def test_min_cost_func():
 
     print(
         "Testing minimize cost func",
-        minimize_cost(
+        minimize_cost_func(
             u_test,
             frame_test,
             cur_key))

@@ -7,22 +7,7 @@ import argparse
 import math
 
 from pose_estimation.camera_pose_estimation import fix_u
-
-sigma_p = 0  # White noise variance
-im_size = (480, 640)
-index_matrix = np.reshape(
-    np.dstack(
-        np.meshgrid(
-            np.arange(480),
-            np.arange(640),
-            indexing='ij')),
-    (480 * 640,
-     2))
-# 3x3 Intrinsic camera matrix - converts 3x3 point in camera frame to
-# homogeneous repreentation of an image coordiante
-cam_matrix = np.eye(3, 3)
-cam_matrix_inv = np.linalg.inv(cam_matrix)
-
+from params import im_size,camera_matrix as cam_matrix,camera_matrix_inv as cam_matrix_inv,sigma_p
 
 def find_uncertainty(u, D, D_prev, T):
     '''

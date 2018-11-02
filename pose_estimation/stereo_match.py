@@ -24,12 +24,7 @@ import time
 from multiprocessing import Pool
 
 from matplotlib import pyplot as plt
-# Put in some doc later
-im_size = (480, 640)
-
-camera_matrix = np.eye(3, 3)  # Read from doc later
-camera_matrix_inv = np.linalg.inv(camera_matrix)
-
+from params import im_size,camera_matrix,camera_matrix_inv
 
 def get_essential_matrix(T):
     '''
@@ -216,93 +211,7 @@ def five_pixel_match(img1, img2):
     Computes the disparity map for two parallel plane images img1 and img2
     '''
     D = np.zeros(im_size)  # Initilize with some white noise variance?
-    """
-	std_dev = int((np.var(img2))**0.5) # Standard Deviation
-	for i in range(im_size[0]):
-		for j in range(im_size[1] - 8):
-			five_points = np.zeros(5)
-			for k in range(5):
-				five_points[k] = img1[i][j+2*k]
-			min_cost = -1
-			min_pos = -1
-			for k in range(j-2*std_dev,j+2*std_dev+1):
-				if(k<0 or k+10>im_size[1]):
-					continue
-				cost = 0
-				for l in range(5):
-					cost = cost + (five_points[l] - img2[i][k+2l])**2
-				if min_cost == -1:
-					min_cost = cost
-					min_pos = k + 4
-				if cost<min_cost:
-					#print cost,min_cost,j,k
-					min_cost = cost
-					min_pos = k + 4
-			D[i][j+2] = (min_pos + im_size[1] - j)*(255/850.0)*(2/3.0) # Do we need im_size
-			#print i,D[i][j+2],j+2 - min_pos,'\n'
-			print i,j,D[i][j+2],'\n'
-		"""
-	def actual_match_v(vec1, vec2):
-		vec2 = img2
-	    std_dev = int((np.var(vec2))**0.5)
-	    D = np.ones(im_size[1]) * 0.05
-	    for j in range(im_size[1] - 8):
-	        five_points = np.zeros(5)
-	        for k in range(5):
-	            five_points[k] = vec1[j + 2 * k]
-	        min_cost = -1
-	        min_pos = -1
-	        a = time.time()
-	        for k in range(j - 2 * std_dev, j + 2 * std_dev + 1):  # Change to 2?
-	            if(k < 0 or k + 10 > im_size[1]):
-	                continue
-	            cost = 0
-	            for l in range(5):
-	                cost = cost + (five_points[l] - vec2[k + 2 * l])**2
-	            if min_cost == -1:
-	                min_cost = cost
-	                min_pos = k + 4
-	            if cost < min_cost:
-	                # print cost,min_cost,j,k
-	                min_cost = cost
-	                min_pos = k + 4
-	        b = time.time()
-        # print b-a
-        """
-		l = 0
-		u = 8
-		if j-2*std_dev>0:
-			l = j-2*std_dev
-		else:
-			l = 0
-		if j+2*std_dev+1+5>im_size[1]: #Check
-			u = im_size[1]
-		else:
-			u = j+2*std_dev+1
-		vec = np.flip(vec2,axis = 0) # change search range
-		corr = np.correlate(five_points,vec)
-		min_pos = np.argmax(corr)+2"""
-        	D[j + 2] = np.abs(min_pos - j)  # Add im_size(0) also? (and take abs)?
-    	print(time.time())
-    	return D	
-    #actual_match_v = np.vectorize(actual_match, signature='(1),(1)->(1)')
-    #D = actual_match_v(img1, img2)  # Divide by 255.0?
-    pool = Pool(processes = im_size[0])
-    D = pool.map(actual_match_v,img1)
-
-    """D = 1.0/(D + 0.05)
-	print np.amin(D),np.amax(D)
-	D = (D/np.amax(D))*50+0.2
-	print D
-	cv2.imshow('dawd',D)
-	cv2.waitKey(0)"""
-    #D = cv2.medianBlur(D,5)
-    plt.imshow(D, cmap='jet')
-    plt.show()
-    # cv2.imshow('sfefse',(1.0/D))
-    # cv2.waitKey(0)
-    return D
-
+    return 1
 
 def depth_from_disparity(disparity_map, T):
     '''
@@ -317,7 +226,6 @@ def depth_from_disparity(disparity_map, T):
     '''
     return 1.0 / \
         ((disparity_map / (T[0, 3]**2 + T[1, 3]**2 + T[2, 3]**2)**0.5) + 0.001)
-
 
 def stereo_match(frame1, frame2, T1, T2):
     '''
