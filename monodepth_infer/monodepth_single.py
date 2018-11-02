@@ -4,6 +4,7 @@ import tensorflow.contrib.slim as slim
 import tensorflow as tf
 import numpy as np
 
+
 # Module imports
 import monodepth.average_gradients as average_gradients
 import monodepth.monodepth_dataloader as monodepth_dataloader
@@ -16,6 +17,7 @@ Extract monodepth prediction for a given frame
 # only keep warnings and errors
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '0'
+input_height, input_width = 256, 512
 
 
 def post_process_disparity(disp):
@@ -43,6 +45,8 @@ def init_monodepth(checkpoint_path, sess = None):
     '''
     # SESSION
     if not sess:
+        left  = tf.placeholder(tf.float32, [2, input_height, input_width, 3])
+        model = MonodepthModel(params, "test", left, None)
         config = tf.ConfigProto(allow_soft_placement=True)
         sess = tf.Session(config=config)
 

@@ -259,4 +259,4 @@ def test_cam_pose_est():
 	u = get_highgrad_element(frame)
 
 if __name__ == "__main__":
-	test_without_cnn()
+	main()
