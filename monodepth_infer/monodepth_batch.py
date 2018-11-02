@@ -17,7 +17,7 @@ parser = argparse.ArgumentParser(description='Monodepth Batch Inference.')
 
 # Parser args
 parser.add_argument("--path", default = "dummy_data", help="path to files. Needs to have a rgb folder containing images.")
-parser.add_argument("--checkpoint_path", default = "checkpoints/model_kitti_resnet/model_kitti_resnet.data", help="path to checkpoint")
+parser.add_argument("--checkpoint_path", default = "checkpoints/model_city2kitti_resnet/model_city2kitti_resnet.data", help="path to checkpoint")
 parser.add_argument("--image_format", default= ".png", help="path to files. Needs to have a rgb folder containing images.")
 
 args=parser.parse_args()
@@ -74,9 +74,9 @@ def save(d, e):
     disp = cv2.resize(d, (h, w)) 
     
     name = e.split("/")[-1]
-    name = name.split(".")[0]
+    name = ".".join(name.split(".")[:-1])
     name_path = os.path.join(path_depth, name + ".png")
-    plt.imsave(name_path, disp, cmap='gray')
+    plt.imsave(name_path, disp, cmap='plasma')
 
 # Get rgb images
 dataset = tf.data.Dataset.list_files(args.path+"/rgb/*")
@@ -89,7 +89,11 @@ example, image = dataset.get_next()
 model = monodepth_model.MonodepthModel(params, "test", image[0], None)
 disp_pp = model.disp_left_est[0]
 
-with tf.Session() as sess:
+# GPU options
+config = tf.ConfigProto()
+config.gpu_options.allow_growth = True
+
+with tf.Session(config = config) as sess:
     monodepth_single.init_monodepth(args.checkpoint_path,sess = sess)
 
     i = 1
