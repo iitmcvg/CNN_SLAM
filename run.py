@@ -13,20 +13,20 @@ import argparse
 from matplotlib import pyplot as plt
 
 # Modules
-import pose_estimation.depth_map_fusion as depth_map_fusion
+"""import pose_estimation.depth_map_fusion as depth_map_fusion
 import pose_estimation.stereo_match as stereo_match
 from params import *
 import pose_estimation.camera_pose_estimation as camera_pose_estimation
-import pose_estimation.find_uncertainty as find_uncertainty
+import pose_estimation.find_uncertainty as find_uncertainty"""
 from keyframe_utils import Keyframe as Keyframe
+import monodepth_infer.monodepth_single as monodepth
 
-"""
 parser = argparse.ArgumentParser(description='Monodepth TensorFlow implementation.')
-parser.add_argument('--mono_checkpoint_path',  type=str,   help='path to a specific checkpoint to load',required=True)
-parser.add_argument('--input_height',     type=int,   help='input height', default=480)
-parser.add_argument('--input_width',      type=int,   help='input width', default=640)
+parser.add_argument('--mono_checkpoint_path', default = "checkpoints/model_kitti_resnet/model_kitti_resnet.data" ,type=str,   help='path to a specific checkpoint to load')
+parser.add_argument('--input_height', type=int,   help='input height', default=480)
+parser.add_argument('--input_width', type=int,   help='input width', default=640)
 args = parser.parse_args()
-"""
+
 
 # Video cam
 cam = cv2.VideoCapture(0)
@@ -102,6 +102,7 @@ def main():
 	K = []
 
 	# Predict depth
+	image = cv2.imread("pose_estimation/stereo.jpeg")
 	ini_depth = monodepth.get_cnn_depth(sess,image)
 	cv2.imshow('dawd',ini_depth)
 	cv2.waitKey(0)
