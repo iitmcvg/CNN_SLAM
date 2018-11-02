@@ -11,7 +11,7 @@ Format:
 # file: {args.path}
 # timestamp filename
 
-1311868164.363181 rgb/1311868164.363181.png
+1311868164.363181 depth/1311868164.363181.png
 '''
 
 import os
@@ -19,6 +19,10 @@ import glob
 import argparse
 
 # Parser
-parser = argpase.
+parser = argparse.ArgumentParser()
+parser.add_argument("--rgbd_path",default="../r", help="Path to rgbd images")
 files = glob.glob("depth/*.png")
 
+with open() as f:
+
+for file in files:
