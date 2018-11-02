@@ -3,6 +3,7 @@ import scipy.misc
 import tensorflow.contrib.slim as slim
 import tensorflow as tf
 import numpy as np
+import cv2
 
 # Module imports
 import monodepth.average_gradients as average_gradients
@@ -16,6 +17,7 @@ Extract monodepth prediction for a given frame
 # only keep warnings and errors
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '0'
+input_height, input_width = 256, 512
 
 
 def post_process_disparity(disp):
@@ -43,6 +45,22 @@ def init_monodepth(checkpoint_path, sess = None):
     '''
     # SESSION
     if not sess:
+        left  = tf.placeholder(tf.float32, [2, input_height, input_width, 3])
+        params = monodepth_model.monodepth_parameters(
+            encoder="resnet50",
+            height=input_height,
+            width=input_width,
+            batch_size=2,
+            num_threads=1,
+            num_epochs=1,
+            do_stereo=False,
+            wrap_mode="border",
+            use_deconv=False,
+            alpha_image_loss=0,
+            disp_gradient_loss_weight=0,
+            lr_loss_weight=0,
+            full_summary=False)
+        model = monodepth_model.MonodepthModel(params, "test", left, None)
         config = tf.ConfigProto(allow_soft_placement=True)
         sess = tf.Session(config=config)
 
@@ -77,7 +95,8 @@ def get_depth_map(sess, image_array, encoder="resnet50"):
     * Use frozen graphs instead
     * Switch to tf.data.Datasets
     '''
-    input_height, input_width = image_array.shape()[:2]
+    # org_input_height, org_input_width = image_array.shape[:2]
+
     params = monodepth_model.monodepth_parameters(
         encoder=encoder,
         height=input_height,
@@ -98,14 +117,14 @@ def get_depth_map(sess, image_array, encoder="resnet50"):
 
     input_image = image_array
     original_height, original_width, num_channels = input_image.shape
+    input_image = cv2.resize(input_image,(input_width, input_height),interpolation = cv2.INTER_CUBIC)
     input_image = input_image.astype(np.float32) / 255
     input_images = np.stack((input_image, np.fliplr(input_image)), 0)
 
     disp = sess.run(model.disp_left_est[0], feed_dict={left: input_images})
     disp_pp = post_process_disparity(disp.squeeze()).astype(np.float32)
 
-    disp_to_img = scipy.misc.imresize(
-        disp_pp.squeeze(), [
-            original_height, original_width])
+    disp_to_img = cv2.resize(
+        disp_pp.squeeze(), (original_height, original_width))
 
     return disp_to_img

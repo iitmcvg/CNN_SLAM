@@ -31,7 +31,7 @@ monodepth_parameters = namedtuple('parameters',
 class MonodepthModel(object):
     """monodepth model"""
 
-    def __init__(self, params, mode, left, right, reuse_variables=None, model_index=0):
+    def __init__(self, params, mode, left, right, reuse_variables=tf.AUTO_REUSE, model_index=0):
         self.params = params
         self.mode = mode
         self.left = left
