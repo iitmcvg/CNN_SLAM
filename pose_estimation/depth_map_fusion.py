@@ -7,7 +7,7 @@ import sys
 import time
 
 from pose_estimation.keyframe_utils import fix_u
-from params import im_size,camera_matrix as cam_matrix,camera_matrix_inv as cam_matrix_inv
+from params import im_size,camera_matrix as cam_matrix,camera_matrix_inv as cam_matrix_inv,index_matrix,sigma_p
 # 3x3 Intrinsic camera matrix - converts 3x3 point in camera frame to
 # homogeneous repreentation of an image coordiante
 
@@ -35,8 +35,9 @@ def actual_fuse(u, frame, prev_keyframe):
     v = fix_u(v)
     u_p = (prev_keyframe.D[v[0]][v[1]] * prev_keyframe.U[v[0]]
            [v[1]] / frame.D[u[0]][u[1]]) + sigma_p**2
-    D = (u_p * frame.D[u[0]][u[1]] + frame.U[u[0]][u[1]] * prev_keyframe.D[v[0]]
-         [v[1]]) / (u_p + frame.U[u[0]][u[1]])  # Kalman filter update step 1
+    temp2 = frame.U[u[0]][u[1]] * prev_keyframe.D[v[0]][v[1]]
+    temp = (u_p * frame.D[u[0]][u[1]] + temp2)
+    D =  temp/ (u_p + frame.U[u[0]][u[1]])  # Kalman filter update step 1
     # Kalman filter update step 2
     U = u_p * frame.U[u[0]][u[1]] / (u_p + frame.U[u[0]][u[1]])
     return D, U

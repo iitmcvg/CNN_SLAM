@@ -23,7 +23,7 @@ def find_uncertainty(u, D, D_prev, T):
     '''
     u = np.append(u, np.ones(1))  # Convert to homogeneous
     u = u.astype(np.int32)
-
+    #print(u)
     V = D[u[0], u[1]] * np.matmul(cam_matrix_inv, u)  # World point
     V = np.append(V, np.ones(1))
 
@@ -51,8 +51,6 @@ def get_uncertainty(T, D, prev_keyframe):
     '''
     # Write vectorize properly
     # T = np.matmul(np.linalg.inv(T),prev_keyframe.T) #Check if this is right
-    a = find_uncertainty((5,5),D,prev_keyframe.D,T)
-    print("\n\nadwadwa\n\n")
     find_uncertainty_v = np.vectorize(
         find_uncertainty,
         signature='(1)->()',

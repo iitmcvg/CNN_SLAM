@@ -22,9 +22,12 @@ import cv2
 import numpy as np
 import time
 from multiprocessing import Pool
-
+#from keyframe_utils import fix_u
 from matplotlib import pyplot as plt
-from params import im_size,camera_matrix,camera_matrix_inv
+#from params import im_size,camera_matrix,camera_matrix_inv
+camera_matrix = np.eye(3,3) # Camera matrix
+camera_matrix_inv = np.linalg.inv(camera_matrix) 
+im_size = (480,640) # S
 
 def get_essential_matrix(T):
     '''
@@ -172,7 +175,7 @@ def actual_match(vec1, vec2):
         min_cost = -1
         min_pos = -1
         a = time.time()
-        for k in range(j - 2 * std_dev, j + 2 * std_dev + 1):  # Change to 2?
+        for k in range(j - 3 * std_dev, j + 3 * std_dev + 1):  # Change to 2?
             if(k < 0 or k + 10 > im_size[1]):
                 continue
             cost = 0
@@ -202,7 +205,6 @@ def actual_match(vec1, vec2):
         corr = np.correlate(five_points,vec)
         min_pos = np.argmax(corr)+2"""
         D[j + 2] = np.abs(min_pos - j)  # Add im_size(0) also? (and take abs)?
-    print(time.time())
     return D
 
 
@@ -210,9 +212,11 @@ def five_pixel_match(img1, img2):
     '''
     Computes the disparity map for two parallel plane images img1 and img2
     '''
-    
-    D = np.zeros(im_size)  # Initilize with some white noise variance?
-    return 1
+    D = np.zeros(im_size)
+    for i in range(im_size[0]):
+    	D[i] = actual_match(img1[i],img2[i])
+  # Initilize with some white noise variance?
+    return D
 
 def depth_from_disparity(disparity_map, T):
     '''
@@ -248,14 +252,17 @@ def stereo_match(frame1, frame2, T1, T2):
     rel_T = rel_T[:3]
     E = get_essential_matrix(rel_T)
     F = np.matmul(camera_matrix_inv.T, np.matmul(E, camera_matrix_inv))  # Fundamental Matrix
-    frame_rect_1, frame_rect_2, rect_rel_T = rectify_frames(frame1, frame2, F, rel_T)
-    frame_rect_1 = frame_rect_1.astype(np.uint8)
-    frame_rect_2 = frame_rect_2.astype(np.uint8)
-    print(frame_rect_1.dtype)
+    #frame_rect_1, frame_rect_2, rect_rel_T = rectify_frames(frame1, frame2, F, rel_T)
+    frame_rect_1,frame_rect_2 = cv2.StereoRectify(camera_matrix,camera_matrix,imageSize = im_size,R = rel_T[:3,:3],T = rel_T[:3,3])
+    cv2.imshow("adwadaw",frame_rect_1)
+    frame_rect_1 = np.transpose(frame_rect_1.astype(np.uint8))
+    frame_rect_2 = np.transpose(frame_rect_2.astype(np.uint8))
     #disparity_map = five_pixel_match(frame1, frame2)  # Disparity map
     stereo = cv2.StereoBM_create(numDisparities=16, blockSize=7)
     disparity_map = stereo.compute(frame_rect_1,frame_rect_2)
     depth_map = depth_from_disparity(disparity_map, rect_rel_T)
+    plt.imshow(disparity_map,cmap = 'gray')
+    plt.show()
     return depth_map
 
 
@@ -283,22 +290,70 @@ def test_5_match():
     cv2.imshow('dawwd',disparity)
     cv2.waitKey(0)"""
 
+def fix_u(u_prop):
+    '''
+    Fixes a pixel location if it is negative or out of bounds
 
+    Arguments;
+            u_prop: pixel location
+
+    Returns:
+            u_prop: fixed pixel location
+    '''
+    if u_prop[0] >= im_size[0]:
+        u_prop[0] = im_size[0] - 1
+    elif u_prop[0] < 0:
+        u_prop[0] = 0
+    if u_prop[1] >= im_size[1]:
+        u_prop[1] = im_size[1] - 1
+    elif u_prop[1] < 0:
+        u_prop[1] = 0
+    return u_prop
+
+
+"""
 def test_stereo_match():
-    print(time.time())
     img1 = cv2.resize(cv2.imread("pose_estimation/stereo.jpeg",0),(im_size[1], im_size[0]),interpolation=cv2.INTER_CUBIC)
     img2 = cv2.resize(cv2.imread("pose_estimation/stereo(1).jpeg",0),(im_size[1],im_size[0]),interpolation=cv2.INTER_CUBIC)
-    T1 = np.array([[1, 0, 0, 5], [0, 1, 0, 0], [0, 0, 1, 0]])
-    T2 = np.array([[1, 0, 0, 7], [0, 1, 0, 0], [0, 0, 1, 0]])
-    depth_map = stereo_match(img1, img2, T1, T2)
-    print(time.time())
-    #plt.imshow(depth_map, cmap='gray')
+    img1_rect = img2_rect = img1
+    T1 = np.array([[1, 0, 0, 9.5], [0, 1, 0, 0], [0, 0, 1, 0]])
+    T2 = np.array([[1, 0, 0, 10], [0, 1, 0, 0], [0, 0, 1, 0]])
+    T_rel = np.matmul(np.linalg.inv(np.append(T1,[[0,0,0,1]],0)),np.append(T2,[[0,0,0,1]],0))
+    R1 = R2 = np.zeros((3,3))
+    P1 = P2 = np.zeros((3,4))
+    cv2.stereoRectify(cameraMatrix1 = camera_matrix,cameraMatrix2 = camera_matrix,distCoeffs1 = np.zeros(5),distCoeffs2 = np.zeros(5),imageSize = im_size,R = T_rel[:3,:3],T = -T_rel[:3,3],R1 = R1,R2 = R2,P1 = P1,P2 = P2,newImageSize = im_size)
+    print(T_rel[:3,:3],P1)
+	map1,map2 = cv2.initUndistortRectifyMap(camera_matrix,np.zeros(5),R1,size = im_size,m1type = cv2.CV_16SC2,newCameraMatrix = P1)
+	img1_rect = cv2.remap(img1,map1 = map1,map2 = map2,interpolation = cv2.INTER_CUBIC)
+	plt.imshow(map1,cmap = 'gray')
+	plt.show()
+    stereo = cv2.StereoBM_create(numDisparities=64, blockSize=11)
+    disparity_map = stereo.compute(img1,img2)
+    #plt.imshow(disparity_map,cmap = 'gray')
     #plt.show()
     return 1
+"""
+
+def for_just_refine(img1,img2):
+	T1 = np.array([[1, 0, 0, 3], [0, 1, 0, 0], [0, 0, 1, 0]])
+	T2 = np.array([[1, 0, 0, 5], [0, 1, 0, 0], [0, 0, 1, 0]])
+    # Go from frame1 to prev keyframe and then to frame2
+	T_rel = np.matmul(np.linalg.inv(np.append(T1,[[0,0,0,1]],0)),np.append(T2,[[0,0,0,1]],0))
+	rel_T = T_rel[:3]
+	E = get_essential_matrix(rel_T)
+	F = np.matmul(camera_matrix_inv.T, np.matmul(E, camera_matrix_inv))  # Fundamental Matrix
+	disparity_map = five_pixel_match(img1, img2)  # Disparity map
+	#stereo = cv2.StereoBM_create(numDisparities=16, blockSize=7)
+	#disparity_map = stereo.compute(frame_rect_1,frame_rect_2)
+	depth_map = depth_from_disparity(disparity_map, rel_T)
+	plt.imshow(disparity_map,cmap = 'gray')
+	plt.show()
+	return disparity_map,depth_map	
+
 
 
 if __name__ == '__main__':
-    test_stereo_match()
+    #test_stereo_match()
     """img1 = cv2.resize(
         cv2.imread(
             "pose_estimation/stereo.jpeg",
