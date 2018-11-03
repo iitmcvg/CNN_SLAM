@@ -6,6 +6,7 @@ import argparse
 import numpy as np
 import cv2
 import os
+from PIL import Image
 import matplotlib.pyplot as plt
 
 # Module imports
@@ -26,6 +27,8 @@ args=parser.parse_args()
 input_height, input_width = 256, 512
 batch_size = 1
 encoder = 'resnet50'
+
+MAX = 255
 
 params = monodepth_model.monodepth_parameters(
     encoder=encoder,
@@ -75,9 +78,15 @@ def save(d, e):
     
     name = e.split("/")[-1]
     name = ".".join(name.split(".")[:-1])
-    name_path = os.path.join(path_depth, name + ".png")
-    plt.imsave(name_path, disp, cmap='plasma')
+    name_path = os.path.join(path_depth, name )
+    # plt.imsave(name_path, disp, cmap='plasma')
+    
+    #Rescale to 0-255 and convert to uint8
+    #rescaled = (MAX / disp.max() * (disp - disp.min())).astype(np.uint8)
 
+    #im = Image.fromarray(disp)
+    #im.save(name_path)
+    np.save(name_path,disp)
 # Get rgb images
 dataset = tf.data.Dataset.list_files(args.path+"/rgb/*")
 dataset = dataset.map(_parse_fn)
