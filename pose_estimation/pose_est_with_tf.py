@@ -8,6 +8,7 @@ import cv2
 import sys
 import time
 import argparse
+import tensorflow as tf
 import math
 from multiprocessing import Pool
 
@@ -17,8 +18,9 @@ from pose_estimation.config import *
 import pose_estimation.optimiser as optimiser
 import pose_estimation.depth_map_fusion as depth_map_fusion
 from pose_estimation.stereo_match import *
-from params import camera_matrix as cam_matrix,camera_matrix_inv as cam_matrix_inv,sigma_p
 #import monodepth_infer.monodepth_single as monodepth
+
+tf.enable_eager_execution()
 
 def get_initial_pose():
     '''
@@ -30,12 +32,20 @@ def get_initial_pose():
 def get_initial_covariance():
     return np.eye(6)
 
-def calc_photo_residual(i, frame, cur_keyframe, T,step = 0.1):
+@tf.custom_gradient
+def calc_frame_val(u,frame):
+    def grad(dy):
+        u = u.numpy()
+        u = u.astype(int)
+        return np.sqrt((frame[u[0]+1,u[1]] - frame[u[0]-1,u[1]])**2+(frame[u[0],u[1]+1] - frame[u[0],u[1]-1])**2)
+    return tf.contrib.eager.Variable(frame[u[0],u[1]])
+
+def calc_photo_residual(i, frame, cur_keyframe, T):
     '''
     Calculates the photometric residual for one point
 
     Arguments:
-            i: Pixel location (x,y)
+            i: Pixel location
             frame: Current frame as numpy array
             cur_keyframe: Previous keyframe as Keyframe object
             T: Estimated pose
@@ -44,56 +54,26 @@ def calc_photo_residual(i, frame, cur_keyframe, T,step = 0.1):
             r: Photometric residual
     '''
     # Make i homogeneous
-    i = np.append(i, np.ones(1))
-    i = i.astype(np.uint16)
+    i = tf.concat([i,[1]],0)
     # 3D point 3*1
 
-    #print("i",i)
-    V = cur_keyframe.D[i[0]][i[1]] * np.matmul(cam_matrix_inv, i)
-
-    #print("D:",cur_keyframe.D[i[0]][i[1]])
-    #print("mat:",np.matmul(cam_matrix_inv, i))
-    # Make V homogeneous 4*1
-    V = np.append(V, 1)
-    #print("V",V)
-
-    # 3D point in the real world shifted (3*4 x 4*1 = 3*1)
-    u_prop = np.matmul(T, V)[:3]
-
-    # 3D point in camera frame (3*3 * 3*1)
-    u_prop = np.matmul(cam_matrix, u_prop)
-    #print("u_prop1",u_prop)
-    # Projection onto image plane
-    u_prop = (u_prop / u_prop[2])[:2]
-    u_prop = u_prop.astype(np.uint64)
-    #print("u_prop",u_prop)
-    u_prop = fix_u(u_prop)
-
-    r = (cur_keyframe.F[i[0], i[1]] - frame[u_prop[0], u_prop[1]]).astype(np.float64)
-
-
-    #finding variance
-    V = (cur_keyframe.D[i[0]][i[1]]+step)* np.matmul(cam_matrix_inv, i)
+    V = cur_keyframe.D[i[0].numpy()][i[1].numpy()] * tf.matmul(cam_matrix_inv, i)
 
     # Make V homogeneous 4*1
-    V = np.append(V, 1)
+    V = tf.concat([V,[1]],0)
 
     # 3D point in the real world shifted (3*4 x 4*1 = 3*1)
-    u_prop = np.matmul(T, V)[:3]
+    u_prop = tf.matmul(T, V)[:3]
 
     # 3D point in camera frame (3*3 * 3*1)
-    u_prop = np.matmul(cam_matrix, u_prop)
+    u_prop = tf.matmul(cam_matrix, u_prop)
 
     # Projection onto image plane
     u_prop = (u_prop / u_prop[2])[:2]
-    u_prop = u_prop.astype(np.int64)
-
-    u_prop = fix_u(u_prop)
-    #print(i,u_prop)
-    U = (cur_keyframe.F[i[0], i[1]] - frame[u_prop[0], u_prop[1]]).astype(np.float64)
-    deriv = (U-r)/step
-
-    return r,U
+    #u_prop = fix_u(u_prop)
+    val = calc_frame_val(u_prop,frame)
+    r = (cur_keyframe.F[i[0].numpy(), i[1].numpy()]) - val #frame[u_prop[0], u_prop[1]]
+    return r
 
 
 def calc_r_for_delr(u, D, frame, cur_keyframe, T):
@@ -205,11 +185,8 @@ def calc_photo_residual_uncertainty(u, frame, cur_keyframe, T):
     return sigma
 
 def ratio_residual_uncertainty(u, frame, cur_keyframe, T):
-    r,deriv = calc_photo_residual(u, frame, cur_keyframe, T)
-    sigma = (sigma_p**2 + (deriv**2) * cur_keyframe.U[u[0]][u[1]])**0.5
-    #print(r)
-    return huber_norm(r/sigma)
-    #return huber_norm(calc_photo_residual(u, frame, cur_keyframe, T) /calc_photo_residual_uncertainty(u, frame, cur_keyframe, T))
+    return huber_norm(calc_photo_residual(u, frame, cur_keyframe, T) /
+                      calc_photo_residual_uncertainty(u, frame, cur_keyframe, T))
 
 def calc_cost_parallel(uu,frame,cur_keyframe,T):
     pool = Pool(processes = 2)
@@ -247,10 +224,9 @@ def loss_fn_for_jack(uu, frame, cur_keyframe, T_s):
     return np.array(cost) 
 
 def loss_fn(uu, frame, cur_keyframe, T_s):
-    T = get_back_T(T_s)
-    cost = calc_cost(uu, frame, cur_keyframe, T,1)
-    cost = np.sum(cost)
-    cost = cost/len(uu)
+    T = tf_get_back_T(T_s)
+    cost = calc_cost(uu, frame, cur_keyframe, T,1s)
+    cost = tf.reduce_sum(cost)
     return cost 
 
 def get_W(dof, stack_r):
@@ -294,20 +270,10 @@ def grad_fn(u, frame, cur_keyframe, T_s, frac = 0.01):
     '''
     Calculate gradients
     '''
-    grad = np.zeros(6)
-    fract = np.zeros(6)
-    """
-    for i in range(6):
-        fract[i] = frac
-        costa = loss_fn(u, frame, cur_keyframe, T_s * (1 - fract))
-        costb = loss_fn(u, frame, cur_keyframe, T_s * (1 + fract))
-        grad[i] = (costb - costa) / (2*T_s[i]*frac)
-        fract[i] = 0
-    """
-    costa = loss_fn(u, frame, cur_keyframe, T_s * (1 - frac))
-    costb = loss_fn(u, frame, cur_keyframe, T_s * (1 + frac))
-    grad = (costb - costa)/(2*T_s*frac)
-    return grad # 6x1 gradient
+    with tf.GradientTape() as tape:
+        loss_value = loss_func(u,frame,cur_keyframe,T_s)
+    return tape.gradient(loss_value,T_s)
+
 
 # Vectorised implementations
 ratio_residual_uncertainty_v = np.vectorize(
@@ -318,39 +284,29 @@ ratio_residual_uncertainty_v = np.vectorize(
 def minimize_cost_func(u, frame, cur_keyframe, 
     variance = 0.01,
     mean = 5.0,
-    learning_rate = 0.1,
+    learning_rate = 0.05,
     max_iter= 100,
     loss_bound = 0.1):
-    frame = frame.astype(np.float64)
-    cur_keyframe.F.astype(np.float64)
 
     dof = len(u)
-    T_s = np.random.random((6)) * variance
+    T_s = np.random.random((6)) * variance + mean
 
-    """
-    T = get_back_T(T_s)
-    u = [85,306]
-    r,c = calc_photo_residual(u,frame,cur_keyframe,T)
-    print("\n\nyolo",r)
-    print(c)
-    return 1
-    """
-    
-    optim = optimiser.SGD(lr = learning_rate)
+    optim = optimiser.Adam(lr = learning_rate)
     i = 0
 
     while True:  # Change later
         loss = loss_fn(u, frame, cur_keyframe, T_s)
-        print("loss old:", loss)
+        print("loss ", loss)
         grads = grad_fn(u, frame, cur_keyframe, T_s)
-        print("grads:",grads)
-        print("T_S old:",T_s)
+        print("got grad")
         T_s = optim.get_update([T_s],[grads])[0]
-        print("T_S new:",T_s)
-        print("loss new:",loss_fn(u,frame,cur_keyframe,T_s))
         i = i + 1
+
+        print("grad: ", np.max(grads))
+        print("T_s", T_s)
+
         # Stopping condtions
-        if (loss < loss_bound) or (i == max_iter):# or (abs(np.max(grads)) > 10000):
+        if (loss < loss_bound) or (i == max_iter) or (abs(np.max(grads)) > 10000):
             break
     print(loss_fn(u, frame, cur_keyframe, T_s))
     C = find_covariance_matrix(u,frame,cur_keyframe,T_s)

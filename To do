@@ -1,0 +1,17 @@
+Rectified frame not coming properly and Why is frame getting transposed when being rectified? - see cv2.stereorectify
+pose estimation error - add fix_u in tf version
+uncertainty zeros in den
+Zero det hessian and other random ass zeros
+Normalise depth and deal with zero disparity
+not finding huber norm, just squaring right now
+x and y interchange while generating point cloud and other places
+Initialize pose to prev pose in pose est
+see cv2.correct matches,cv2.reprojectimageto3d  - check out that whole page
+remove all .numpy()
+Show only certain points
+Use pangolin
+Semantic label seg
+instead of fix_u, chuck out the point
+
+# Possible error
+I to F in keyframe class

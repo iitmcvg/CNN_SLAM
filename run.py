@@ -11,15 +11,17 @@ import sys
 import time
 import argparse
 from matplotlib import pyplot as plt
+from PIL import Image
 
 # Modules
-"""import pose_estimation.depth_map_fusion as depth_map_fusion
+import pose_estimation.depth_map_fusion as depth_map_fusion
 import pose_estimation.stereo_match as stereo_match
 from params import *
 import pose_estimation.camera_pose_estimation as camera_pose_estimation
-import pose_estimation.find_uncertainty as find_uncertainty"""
+import pose_estimation.find_uncertainty as find_uncertainty
 from keyframe_utils import Keyframe as Keyframe
 import monodepth_infer.monodepth_single as monodepth_single
+#from pose_graph_optimisation.pose_graph_optimisation import cloud_for_vis
 
 parser = argparse.ArgumentParser(description='Monodepth TensorFlow implementation.')
 parser.add_argument('--mono_checkpoint_path', default = "checkpoints/model_kitti_resnet/model_kitti_resnet.data" ,type=str,   help='path to a specific checkpoint to load')
@@ -86,6 +88,7 @@ def _exit_program():
 def main():
 	# INIT monodepth_single session
 	sess=monodepth_single.init_monodepth(args.mono_checkpoint_path)
+	keyf1 = cv2.resize(cv2.imread("pose_estimation/stereo.jpeg"),(im_size[1],im_size[0]),interpolation = cv2.INTER_CUBIC)
 
 	# INIT camera matrix
 	cam_matrix = get_camera_matrix()
@@ -96,16 +99,16 @@ def main():
 		raise (Error, "Verify camera matrix")
 
 	# Image is 3 channel, frame is grayscale
-	ret,image,frame = get_camera_image()
+	#ret,image,frame = get_camera_image()
 
 	# List of keyframe objects
 	K = []
 
 	# Predict depth
 	image = cv2.imread("pose_estimation/stereo.jpeg")
-	ini_depth = monodepth_single.get_depth_map(sess,image)
-	cv2.imshow('dawd',ini_depth)
-	cv2.waitKey(0)
+	ini_depth = monodepth_single.get_depth_map(sess,keyf1)
+	plt.imshow(ini_depth)
+	plt.show()
 
     # Initalisation
 	ini_uncertainty = find_uncertainty.get_initial_uncertainty()
@@ -165,7 +168,6 @@ def test_without_cnn():
 	gray_keyf1 = cv2.cvtColor(keyf1,cv2.COLOR_BGR2GRAY)
 	# INIT camera matrix
 	cam_matrix = get_camera_matrix()
-
 	try: 
 		cam_matrix_inv = np.linalg.inv(cam_matrix)
 	except:
@@ -187,7 +189,7 @@ def test_without_cnn():
 	K.append(Keyframe(ini_pose,ini_depth,ini_uncertainty,frame,image,ini_C)) 
 	cur_keyframe = K[0]
 	cur_index = 0
-	prev_frame = cur_keyframe.I
+	prev_frame = cur_keyframe.F
 	prev_pose = cur_keyframe.T
 
 	# ret,image,frame = get_camera_image() # frame is the numpy array
@@ -205,13 +207,12 @@ def test_without_cnn():
 	print ("**********************************************\n")
 
     # Finds pose of current frame by minimizing photometric residual (wrt prev keyframe)
-	T,C,_ = camera_pose_estimation.minimize_cost_func(u,frame,cur_keyframe) 
+	T,C,_ = camera_pose_estimation.minimize_cost_func(u,frame,cur_keyframe) #ini_pose,ini_C,3#
             
 	print ("*****************************")
 	print ("Estimated Pose")
 	print ("*****************************\n")
 	print ("T = ", T,'\n')
-
 	if check_keyframe(T):	
 		print ("Error: second frame cant be keyframe\n")	
 		# If it is a keyframe, add it to K after finding depth and uncertainty map                    
@@ -238,13 +239,13 @@ def test_without_cnn():
 		print ("*****************************")
 		print ("Stereo Matching Done")
 		print ("*****************************\n")
-		plt.imshow(D_frame)
-		plt.show()
+		#plt.imshow(D_frame)
+		#plt.show()
 		print ("**********************************")
 		print ("Going to find uncertainty")
 		print ("**********************************")
 		U_frame = find_uncertainty.get_uncertainty(T,D_frame,cur_keyframe)
-		frame_obj = Keyframe(T,D_frame,U_frame,frame) # frame as a keyframe object
+		frame_obj = Keyframe(T,D_frame,U_frame,frame,image,C) # frame as a keyframe object
 		cur_keyframe.D,cur_keyframe.U = depth_map_fusion.fuse_depth_map(frame_obj,cur_keyframe)
 		print ("**********************************")
 		print ("Found uncertainty and fused it")
@@ -259,5 +260,58 @@ def test_cam_pose_est():
 	img2 = cv2.resize(cv2.imread("stereo(1).jpeg",0),(im_size[1],im_size[0]),interpolation = cv2.INTER_CUBIC)
 	u = get_highgrad_element(frame)
 
+def just_refine():
+	# INIT monodepth_single session
+	sess=monodepth_single.init_monodepth(args.mono_checkpoint_path)
+	img1 = cv2.resize(cv2.imread("pose_estimation/stereo_kitti1.png"),(im_size[1],im_size[0]),interpolation = cv2.INTER_CUBIC)
+	img2 = cv2.resize(cv2.imread("pose_estimation/stereo_kitti2.png"),(im_size[1],im_size[0]),interpolation = cv2.INTER_CUBIC)
+
+	gray1 = cv2.cvtColor(img1,cv2.COLOR_BGR2GRAY)
+	gray2 = cv2.cvtColor(img2,cv2.COLOR_BGR2GRAY)
+	# INIT camera matrix
+	cam_matrix = get_camera_matrix()
+
+	try: 
+		cam_matrix_inv = np.linalg.inv(cam_matrix)
+	except:
+		raise (Error, "Verify camera matrix")
+
+	# Image is 3 channel, frame is grayscale
+	#ret,image,frame = get_camera_image()
+
+	# Predict depth
+	ini_depth = monodepth_single.get_depth_map(sess,img1)
+	#plt.imshow(ini_depth)
+	#pslt.savefig('cnn.png')
+
+    # Initalisation
+	ini_uncertainty = find_uncertainty.get_initial_uncertainty()
+	cv2.imwrite("cnn2.jpg",ini_depth)
+	disparity,depth = stereo_match.for_just_refine(gray1,gray2)
+	cv2.imwrite("disp2.jpg",disparity)
+
+	"""
+	fused_disparity = 0.33*disparity + 0.66*ini_depth
+	plt.subplot(2,2,1),plt.imshow(img1,cmap = 'gray')
+	plt.title('Original'), plt.xticks([]), plt.yticks([])
+	plt.subplot(2,2,2),plt.imshow(ini_depth,cmap = 'gray')
+	plt.title('CNN - Predicted depth'), plt.xticks([]), plt.yticks([])
+	plt.subplot(2,2,3),plt.imshow(disparity,cmap = 'gray')
+	plt.title('Stereo matching results'), plt.xticks([]), plt.yticks([])
+	plt.subplot(2,2,4),plt.imshow(fused_disparity,cmap = 'gray')
+	plt.title('Fused Results'), plt.xticks([]), plt.yticks([])
+	plt.show()
+	plt.savefig('output1.png')
+"""
+	plt.imshow(ini_depth)
+	plt.savefig('kitti_original.png')
+	plt.imshow(disparity)
+	plt.savefig('stereo_matched.png')
+	fused = 0.33*ini_depth + 0.66*disparity
+	plt.imshow(fused)
+	plt.show()
+	plt.savefig('fused.png')
+	#cloud_for_vis(img1,disparity)
+
 if __name__ == "__main__":
-	main()
+	just_refine()

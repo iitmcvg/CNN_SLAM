@@ -113,7 +113,6 @@ with tf.Session(config = config) as sess:
             _example, _image, _disp = sess.run([example,
                 image, 
                 model.disp_left_est[0]])
-
             _disp_pp = monodepth_single.post_process_disparity(_disp.squeeze().astype(np.float32))
 
             save(_disp_pp, _example)
