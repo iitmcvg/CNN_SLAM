@@ -12,13 +12,15 @@
 import numpy as np 
 import tensorflow as tf
 import math
+import OpenGL.GL as gl
 import time
 import keyframe_utils as utils
+import time
 from matplotlib import pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from params import threshold_for_graph_opt as thresh,learning_rate_for_graph_opt as learning_rate
 from pose_graph_optimisation.generate_point_cloud import *
-tf.enable_eager_execution()
+import pangolin
 
 # Move following back to run.py and access from there
 
@@ -47,6 +49,14 @@ def find_grad(world_poses,poses,covariances,length):
 def create_point_cloud(keyframes,world_poses):
 	return 1
 
+def visualise(world_poses):
+
+
+	plt.show()
+	time.sleep(2)
+	plt.close(fig)
+
+
 def pose_graph_optimisation(keyframes):
 	'''
 	Optimises graph
@@ -57,6 +67,7 @@ def pose_graph_optimisation(keyframes):
 	Returns:
 		Points cloud
 	'''
+	tf.enable_eager_execution()
 
 	poses = []
 	world_poses = []
@@ -78,6 +89,8 @@ def pose_graph_optimisation(keyframes):
 	print()
 	# j is length of array
 	i = -1
+	fig = plt.figure()
+	ax = Axes3D(fig)
 	while(1):
 		i += 1
 		grads = find_grad(world_poses, poses,covariances,j)
@@ -85,12 +98,23 @@ def pose_graph_optimisation(keyframes):
 		#print("wp",world_poses,"\n\n")
 		optimizer.apply_gradients(zip(grads,world_poses),global_step = tf.train.get_or_create_global_step())
 		loss = find_cost(world_poses,poses,covariances,j)
+		print(loss)
+		a = []
+		for i in range(len(world_poses)):
+			x,y,z = world_poses[i].numpy()[0],world_poses[i].numpy()[1],world_poses[i].numpy()[2]
+			a.append(ax.scatter(x,y,z))
+		plt.pause(0.05)
 		#print(loss.numpy())
-		if abs(loss.numpy())<thresh:
+		#plt.clf()
+		if abs(loss.numpy())<15:
 			break
+		for i in range(len(world_poses)):
+			a[i].remove()
+	plt.show()
 	print("done")
-	cloud = generate_point_cloud(keyframes,world_poses)
-	return cloud
+
+	#cloud = generate_point_cloud(keyframes,world_poses)
+	return 1#cloud
 
 def test_pose_graph_optimisation():
 	keyframes = []
@@ -107,7 +131,7 @@ def test_pose_graph_optimisation():
 	keyframes.append(utils.Keyframe(T1,0,0,0,0,C1))
 	keyframes.append(utils.Keyframe(T2,0,0,0,0,C2))
 	keyframes.append(utils.Keyframe(T3,0,0,0,0,C3))
-	for i in range(20):
+	for i in range(15):
 		T1_s = np.random.random(6)
 		T1 = utils.get_back_T(T1_s)
 		C1 = np.absolute(np.random.random((6,6)))
@@ -123,11 +147,41 @@ def cloud_for_vis(img,depth):
 	points_in_world = np.matmul(camera_matrix_inv,points_in_cam_frame.T) # 3x480*640
 	points_in_world = np.transpose(points_in_world) # 480*640x3
 	points_colours = np.reshape(img,(480*640,3)) # RGB values for each point
-	fig = plt.figure()
+	"""fig = plt.figure()
 	ax = Axes3D(fig)
 	#ax.scatter([2,4,5,2],[3,4,2,1],[6,3,4,1])
 	ax.scatter(points_in_world[:,0],points_in_world[:,1],points_in_world[:,2])
-	plt.show()
+	plt.show()"""
+
+	pangolin.CreateWindowAndBind('Main', 640, 480)
+	gl.glEnable(gl.GL_DEPTH_TEST)
+
+# Define Projection and initial ModelView matrix
+	scam = pangolin.OpenGlRenderState(pangolin.ProjectionMatrix(640, 480, 420, 420, 320, 240, 0.2, 100),pangolin.ModelViewLookAt(-2, 2, -2, 0, 0, 0, pangolin.AxisDirection.AxisY))
+	handler = pangolin.Handler3D(scam)
+
+	# Create Interactive View in window
+	dcam = pangolin.CreateDisplay()
+	dcam.SetBounds(0.0, 1.0, 0.0, 1.0, -640.0/480.0)
+	dcam.SetHandler(handler)
+
+	while not pangolin.ShouldQuit():
+		gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
+		gl.glClearColor(1.0, 1.0, 1.0, 1.0)
+		dcam.Activate(scam)
+    
+    	# Render OpenGL Cube
+		#pangolin.glDrawColouredCube()
+
+    	# Draw Point Cloud
+		points = points_in_world#np.random.random((100000, 3)) * 10
+		gl.glPointSize(2)
+		gl.glColor3f(1.0, 0.0, 0.0)
+		pangolin.DrawPoints(points)
+
+		pangolin.FinishFrame()
+
+
 
 if __name__ == '__main__':
 	test_pose_graph_optimisation()

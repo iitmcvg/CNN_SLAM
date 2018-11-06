@@ -21,7 +21,7 @@ import pose_estimation.camera_pose_estimation as camera_pose_estimation
 import pose_estimation.find_uncertainty as find_uncertainty
 from keyframe_utils import Keyframe as Keyframe
 import monodepth_infer.monodepth_single as monodepth_single
-#from pose_graph_optimisation.pose_graph_optimisation import cloud_for_vis
+from pose_graph_optimisation.pose_graph_optimisation import test_pose_graph_optimisation,cloud_for_vis
 
 parser = argparse.ArgumentParser(description='Monodepth TensorFlow implementation.')
 parser.add_argument('--mono_checkpoint_path', default = "checkpoints/model_kitti_resnet/model_kitti_resnet.data" ,type=str,   help='path to a specific checkpoint to load')
@@ -263,8 +263,8 @@ def test_cam_pose_est():
 def just_refine():
 	# INIT monodepth_single session
 	sess=monodepth_single.init_monodepth(args.mono_checkpoint_path)
-	img1 = cv2.resize(cv2.imread("pose_estimation/stereo_kitti1.png"),(im_size[1],im_size[0]),interpolation = cv2.INTER_CUBIC)
-	img2 = cv2.resize(cv2.imread("pose_estimation/stereo_kitti2.png"),(im_size[1],im_size[0]),interpolation = cv2.INTER_CUBIC)
+	img1 = cv2.resize(cv2.imread("pose_estimation/stereo.jpeg"),(im_size[1],im_size[0]),interpolation = cv2.INTER_CUBIC)
+	img2 = cv2.resize(cv2.imread("pose_estimation/stereo(1).jpeg"),(im_size[1],im_size[0]),interpolation = cv2.INTER_CUBIC)
 
 	gray1 = cv2.cvtColor(img1,cv2.COLOR_BGR2GRAY)
 	gray2 = cv2.cvtColor(img2,cv2.COLOR_BGR2GRAY)
@@ -285,11 +285,10 @@ def just_refine():
 	#pslt.savefig('cnn.png')
 
     # Initalisation
-	ini_uncertainty = find_uncertainty.get_initial_uncertainty()
-	cv2.imwrite("cnn2.jpg",ini_depth)
+	#ini_uncertainty = find_uncertainty.get_initial_uncertainty()
+	#cv2.imwrite("cnn2.jpg",ini_depth)
 	disparity,depth = stereo_match.for_just_refine(gray1,gray2)
-	cv2.imwrite("disp2.jpg",disparity)
-
+	cv2.imwrite("disp_main.jpg",disparity)
 	"""
 	fused_disparity = 0.33*disparity + 0.66*ini_depth
 	plt.subplot(2,2,1),plt.imshow(img1,cmap = 'gray')
@@ -307,11 +306,11 @@ def just_refine():
 	plt.savefig('kitti_original.png')
 	plt.imshow(disparity)
 	plt.savefig('stereo_matched.png')
-	fused = 0.33*ini_depth + 0.66*disparity
-	plt.imshow(fused)
-	plt.show()
-	plt.savefig('fused.png')
-	#cloud_for_vis(img1,disparity)
+	#fused = 0.33*ini_depth + 0.66*disparity
+	#plt.imshow(fused)
+	#plt.show()
+	#plt.savefig('fused.png')
+	cloud_for_vis(img1,disparity)
 
 if __name__ == "__main__":
-	just_refine()
+	test_pose_graph_optimisation()

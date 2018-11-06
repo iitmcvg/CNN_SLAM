@@ -6,6 +6,7 @@ Imported by camera pose estimation
 
 import numpy as np
 import math
+import tensorflow as tf
 
 class Keyframe:
     def __init__(self, pose, depth, uncertainty, frame, image,covariance):
